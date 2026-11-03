@@ -24,16 +24,30 @@ class SimulatedCar(Transport):
         self.dtcs = [(0x01, 0x71), (0x11, 0x05)]  # P0171, P1105
         # ISO-TP izejošā daudzkadru atbilde, kas gaida FC
         self._pending_cf: list[bytes] = []
-        # T7 stāvoklis
-        self.t7_session = False
-        self.t7_unlocked = False
-        self.t7_seed = 0x1234
-        self.t7_lids: dict[int, bytes] = {
-            0x90: SIM_VIN.encode(),
-            0x91: b"5380691",
-            0x94: b"EH0X_31L.24E",
-            0x97: b"B235R",
+        # KWP moduļi: mērķa adrese -> stāvoklis
+        self.modules: dict[int, dict] = {
+            0x11: {  # Trionic 7
+                "lids": {
+                    0x90: SIM_VIN.encode(),
+                    0x91: b"5380691",
+                    0x94: b"EH0X_31L.24E",
+                    0x97: b"B235R",
+                },
+                "dtcs": [(0x01, 0x71, 0x01)],
+                "seed": 0x1234,
+                "io": {},
+            },
+            0x28: {  # FIKTĪVS ABS modulis – tikai simulatoram, NAV īstā adrese
+                "lids": {0x01: b"SIM-ABS 5.7", 0x10: bytes([0x01])},
+                "dtcs": [(0x50, 0x35, 0x41), (0x50, 0x40, 0x00)],
+                "seed": 0x0BEE,
+                "io": {0x20: "Kreisā priekšējā riteņa vārsts"},
+            },
         }
+        self.active: int | None = None
+        self.t7_session = False
+        self.unlocked: set[int] = set()
+        self.io_log: list[tuple[int, int, int]] = []
         self.t7_memory = bytes((i * 7 + (i >> 8)) & 0xFF for i in range(0x80000))
         self._dyn_f0: tuple[int, int] | None = None
         self._t7_req = bytearray()
@@ -47,8 +61,11 @@ class SimulatedCar(Transport):
         if frame.arb_id in (0x7DF, 0x7E0):
             self._obd_frame(frame.data)
         elif frame.arb_id == 0x220:
-            self.t7_session = True
-            self._emit(0x238, [0x40, 0xBF, 0x21, 0xC1, 0x00, 0x11, 0x02, 0x58])
+            target = frame.data[3]
+            if target in self.modules:
+                self.active = target
+                self.t7_session = True
+                self._emit(0x238, [0x40, 0xBF, 0x21, 0xC1, 0x00, target, 0x02, 0x58])
         elif frame.arb_id == 0x240 and self.t7_session:
             self._t7_row(frame.data)
         elif frame.arb_id == 0x266 and self.t7_session:
@@ -164,33 +181,53 @@ class SimulatedCar(Transport):
         self._out.append(CanFrame(0x258, rows[0]))
         self._t7_resp_rows = rows[1:]
 
+    @property
+    def t7_lids(self) -> dict[int, bytes]:
+        return self.modules[0x11]["lids"]
+
     def _t7_service(self, req: bytes) -> bytes:
+        m = self.modules[self.active]
         svc = req[0]
         if svc == 0x3E:
             return b"\x7E"
+        if svc == 0x10:
+            return bytes([0x50, req[1]])
         if svc == 0x27 and req[1] == 0x05:
-            return bytes([0x67, 0x05, self.t7_seed >> 8, self.t7_seed & 0xFF])
+            return bytes([0x67, 0x05, m["seed"] >> 8, m["seed"] & 0xFF])
         if svc == 0x27 and req[1] == 0x06:
             key = (req[2] << 8) | req[3]
-            if key == calculate_key(self.t7_seed, 0):
-                self.t7_unlocked = True
+            if key == calculate_key(m["seed"], 0):
+                self.unlocked.add(self.active)
                 return bytes([0x67, 0x06, 0x34])
             return bytes([0x7F, 0x27, 0x35])
+        if svc == 0x1A:
+            return bytes([0x5A, req[1], *b"SIM"])
+        if svc == 0x18:
+            flat = [b for d in m["dtcs"] for b in d]
+            return bytes([0x58, len(m["dtcs"]), *flat])
+        if svc == 0x14:
+            m["dtcs"] = []
+            return bytes([0x54, 0xFF, 0x00])
+        if svc == 0x30:
+            if req[1] not in m["io"]:
+                return bytes([0x7F, 0x30, 0x31])
+            self.io_log.append((self.active, req[1], req[2]))
+            return bytes([0x70, req[1], req[2]])
         if svc == 0x21:
             lid = req[1]
-            if lid == 0xF0 and self._dyn_f0:
+            if lid == 0xF0 and self._dyn_f0 and self.active == 0x11:
                 a, n = self._dyn_f0
                 return bytes([0x61, 0xF0, *self.t7_memory[a : a + n]])
-            if lid in self.t7_lids:
-                return bytes([0x61, lid, *self.t7_lids[lid]])
+            if lid in m["lids"]:
+                return bytes([0x61, lid, *m["lids"][lid]])
             return bytes([0x7F, 0x21, 0x31])
         if svc == 0x3B:
-            if not self.t7_unlocked:
+            if self.active not in self.unlocked:
                 return bytes([0x7F, 0x3B, 0x33])
             lid = req[1]
-            if lid not in self.t7_lids:
+            if lid not in m["lids"]:
                 return bytes([0x7F, 0x3B, 0x31])
-            self.t7_lids[lid] = bytes(req[2:])
+            m["lids"][lid] = bytes(req[2:])
             self.writes.append((lid, bytes(req[2:])))
             return bytes([0x7B, lid])
         if svc == 0x2C and req[1] == 0xF0:

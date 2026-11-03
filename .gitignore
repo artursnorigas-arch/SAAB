@@ -5,3 +5,7 @@ rezerves_kopijas/
 *.bin
 t7_skenesana_*.json
 *.csv
+moduli_lietotajs.json
+atrastie_moduli_*.json
+kopne_*.json
+*_skenesana_*.json

@@ -1,5 +1,7 @@
 # saab95: Saab 9-5 (2007) diagnostika un uzstādījumi
 
+Tech2 stila diagnostikas rīks Saab 9-5 vadības moduļiem.
+
 Komandrindas rīks Saab 9-5 (MY2006–2010) vadības blokiem:
 
 | Līmenis | Ko dara | Statuss |
@@ -65,20 +67,92 @@ saab95 --can slcan --channel COM6 t7-dump mans_ecu.bin     # 512 KB programmatū
 
 **Ieteicamā secība pirmajā reizē:** `info` → `t7-info` → `t7-scan` → `t7-dump`. Pēc tam ir rezerves kopijas un pilns saraksts, ko ECU atļauj nolasīt.
 
-## 4. Drošības mehānismi
+## 4. Tech2 režīms (visi moduļi)
+
+```bash
+saab95 --elm COM5 tech2          # interaktīva izvēlne kā Tech2
+```
+
+Izvēlne: **Vadības moduļi** → modulis → Kļūdu kodi / Dzēst / Datu saraksts / Identifikācija / Aktivizēšanas testi / Iestatījumi / Skenēt identifikatorus. Ir arī OBD-II, moduļu meklēšana un CAN monitors.
+
+### Tech2 funkciju salīdzinājums
+
+| Tech2 funkcija | saab95 | Piezīme |
+|---|---|---|
+| Kļūdu kodi visiem moduļiem (lasīt/dzēst) | ✓ | KWP 0x18 / 0x14 |
+| Datu saraksts | ✓ | parametri jādefinē (skat. zemāk) |
+| Identifikācija | ✓ | KWP 0x1A, 0x21 |
+| Aktivizēšanas testi | ✓ | KWP 0x30, vadība vienmēr tiek atdota modulim |
+| Iestatījumi / konfigurācija | ✓ | rakstīšana ar rezerves kopiju |
+| ECM drošības piekļuve | ✓ | tikai Trionic 7 (publisks algoritms) |
+| Citu moduļu drošības piekļuve | – | Saab algoritmi nav publiski |
+| Programmatūras ielāde (SPS) | – | vajadzīgi GM/Saab TIS2Web faili |
+| Atslēgu / imobilaizera programmēšana | – | apzināti nav iekļauts: vajadzīgs Saab drošības kods |
+| Moduļu pievienošana/noņemšana | – | atkarīgs no SPS |
+
+### Moduļu atrašana (vienreizējs darbs)
+
+Publiski ir zināma tikai Trionic 7 (ECM) adrese. Pārējo moduļu adreses rīks atrod pats:
+
+```bash
+saab95 --can slcan --channel COM6 monitor --seconds 5     # kas raida kopnē
+saab95 --can slcan --channel COM6 discover                # P-Bus 500 kbit/s
+saab95 --can slcan --channel COM6 --bitrate 47619 discover  # I-Bus 47,6 kbit/s
+saab95 module-set ABS --target 0x..                       # piešķir atrasto adresi
+saab95 modules                                            # pārskats
+```
+
+Tech2 izvēlnē "Meklēt moduļus kopnē" to dara interaktīvi. Pēc tam:
+
+```bash
+saab95 --elm COM5 mod ABS dtc               # kļūdu kodi
+saab95 --elm COM5 mod ABS clear
+saab95 --elm COM5 mod ABS scan              # atrod nolasāmos parametrus
+saab95 --elm COM5 mod ABS data              # definēto parametru vērtības
+saab95 --elm COM5 mod ABS read 0x10
+saab95 --elm COM5 mod ABS write 0x10 Ieslēgts --apply
+saab95 --elm COM5 mod ABS actuate "KP vārsts"
+```
+
+### Parametru, testu un iestatījumu definēšana
+
+Viss glabājas `moduli_lietotajs.json` darba mapē. Tech2 izvēlnē "Skenēt identifikatorus" nosaukumus var ievadīt uzreiz. Piemērs:
+
+```json
+{
+  "ABS": {
+    "merkis": "0x28",
+    "parametri": {
+      "0x10": {"nosaukums": "Režīms", "tips": "u8", "rakstams": true,
+               "varianti": {"00": "Izslēgts", "01": "Ieslēgts"}},
+      "0x12": {"nosaukums": "Temperatūra", "tips": "u8", "nobide": -40, "vieniba": "°C"}
+    },
+    "aktivizacijas": [
+      {"nosaukums": "KP vārsts", "lid": "0x20", "parametrs": "0x07", "dati": "01", "ilgums": 3,
+       "piezime": "Pacelt riteni un griezt ar roku"}
+    ]
+  }
+}
+```
+
+Tipi: `ascii`, `hex`, `u8`, `s8`, `u16`, `s16`, `u32`. Vērtība = neapstrādātā × `merogs` + `nobide`.
+
+**Svarīgi:** `0x28` šeit ir tikai piemērs (simulatora fiktīvā adrese). Īstās adreses jāatrod uz mašīnas.
+
+## 5. Drošības mehānismi
 
 - Rakstīšana pēc noklusējuma ir **sausais režīms**: tā tikai parāda pašreizējo un jauno vērtību.
 - Ar `--apply` rīks vispirms saglabā veco vērtību mapē `rezerves_kopijas/`, tad prasa ierakstīt `APSTIPRINU`, ieraksta un pārbauda, nolasot vērtību atpakaļ.
 - Pirms rakstīšanas: aizdedzei jābūt ON, dzinējam izslēgtam, akumulatoram uzlādētam (vēlams lādētājs).
 - Ar `--debug` var redzēt katru CAN kadru.
 
-## 5. Ko rīks NEDARA un kāpēc
+## 6. Ko rīks NEDARA un kāpēc
 
 - **Netaisa T7 programmatūras pārrakstīšanu (flash/tūnings).** Ja kļūda notiek šī procesa vidū, ECU var palikt nedarbspējīgs. Tūningam lietojiet pārbaudītos atvērtā koda rīkus: **T7Suite** (karšu rediģēšana `.bin` failā, ko izveido `t7-dump`) un **TrionicCANFlasher** (ierakstīšana).
-- **Nemaina komforta uzstādījumus** (SID, CIM, durvju slēgšana, gaismas). Tie ir citos moduļos uz I-Bus (47,6 kbit/s), un tos maina ar Tech2. Daļu var iestatīt SID izvēlnē bez rīkiem.
+- **Neprogrammē atslēgas un imobilaizeru.** Tam Tech2 vajadzīgs Saab drošības kods no servisa sistēmas.
 - **Neizslēdz emisiju kontroli** (katalizators, lambda, EGR). Ceļu satiksmē tas ir nelikumīgi, un tehniskajā apskatē to konstatēs.
 
-## 6. Ja nestrādā
+## 7. Ja nestrādā
 
 - `Nav atbildes no 7E8`: pārbaudiet, vai aizdedze ir ON. Lētajam ELM327 izmēģiniet `--elm-baud 115200` vai `9600`.
 - `Trionic 7 neatbild`: ECU var nebūt T7 (dīzelis), vai adapteris neatbalsta neapstrādātu CAN režīmu (`ATCAF0`).
@@ -93,4 +167,4 @@ pytest
 
 Simulators (`saab95/simulator.py`) atdarina OBD-II ECU un Trionic 7, tāpēc visu loģiku var testēt bez mašīnas.
 
-Struktūra: `transport.py` (CAN adapteri), `isotp.py`, `obd2.py`, `trionic7.py`, `simulator.py`, `cli.py`.
+Struktūra: `transport.py` (CAN adapteri), `isotp.py`, `obd2.py`, `kwp.py` (visi moduļi), `trionic7.py`, `modules.py` + `moduli.json` (reģistrs), `discovery.py`, `actions.py` (droša rakstīšana, aktivizēšana), `tech2.py` (izvēlne), `simulator.py`, `cli.py`.

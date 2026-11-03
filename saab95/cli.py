@@ -9,11 +9,11 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from . import __version__, obd2, trionic7
+from . import __version__, actions, discovery, modules, obd2, trionic7
+from .kwp import SaabKwp
 from .transport import Elm327Transport, PythonCanTransport, Transport
 
-BACKUP_DIR = Path("rezerves_kopijas")
-CONFIRM_WORD = "APSTIPRINU"
+CONFIRM_WORD = actions.CONFIRM_WORD
 
 
 def open_transport(args) -> Transport:
@@ -161,50 +161,119 @@ def cmd_t7_read(args, tr):
     print(f"0x{args.lid:02X} teksts: {trionic7._printable(raw)}")
 
 
-def _backup(lid: int, raw: bytes) -> Path:
-    BACKUP_DIR.mkdir(exist_ok=True)
-    p = BACKUP_DIR / f"t7_lid_{lid:02X}_{datetime.now():%Y-%m-%d_%H%M%S}.json"
-    p.write_text(
-        json.dumps({"lid": lid, "hex": raw.hex(), "laiks": datetime.now().isoformat()}, indent=2),
-        encoding="utf-8",
-    )
-    return p
-
-
-def _write(args, t: trionic7.Trionic7, lid: int, new: bytes) -> None:
-    old = t.read_local_id(lid)
-    print(f"Identifikators 0x{lid:02X}")
-    print(f"  pašreiz: {old.hex(' ').upper()}  ({trionic7._printable(old)})")
-    print(f"  jauns:   {new.hex(' ').upper()}  ({trionic7._printable(new)})")
-    if old == new:
-        print("Vērtība jau ir tāda pati – nekas netiek mainīts.")
-        return
-    if len(old) != len(new):
-        print(f"  ! Garums atšķiras ({len(old)} -> {len(new)} baiti).")
-    if not args.apply:
-        print("\nSausais režīms – nekas nav ierakstīts. Pievienojiet --apply, lai ierakstītu.")
-        return
-    bpath = _backup(lid, old)
-    print(f"Rezerves kopija: {bpath}")
-    if not confirm(args, "Ierakstīšana ECU. Aizdedze ON, dzinējs IZSLĒGTS, akumulators uzlādēts."):
-        print("Atcelts.")
-        return
-    t.write_local_id(lid, new)
-    check = t.read_local_id(lid)
-    if check == new:
-        print("✓ Ierakstīts un pārbaudīts.")
-    else:
-        print(f"✗ Pārbaude neizdevās! Nolasīts: {check.hex(' ')}. Atjaunot: saab95 t7-restore {bpath}")
+def _write(args, kwp: SaabKwp, module: str, lid: int, new: bytes) -> None:
+    res = actions.write_with_backup(kwp, module, lid, new, args.apply, lambda t: confirm(args, t))
+    if res == "sauss":
+        print("Pievienojiet --apply, lai ierakstītu.")
+    elif res == "kluda":
         sys.exit(2)
 
 
 def cmd_t7_write(args, tr):
-    _write(args, _t7(tr), args.lid, parse_hex(args.value))
+    _write(args, _t7(tr), "ECM", args.lid, parse_hex(args.value))
 
 
 def cmd_t7_restore(args, tr):
     data = json.loads(Path(args.backup).read_text(encoding="utf-8"))
-    _write(args, _t7(tr), int(data["lid"]), bytes.fromhex(data["hex"]))
+    key = data.get("modulis", "ECM")
+    kwp = _module(tr, key)
+    _write(args, kwp, key, int(data["lid"]), bytes.fromhex(data["hex"]))
+
+
+# ---------------- visi moduļi ----------------
+def _module(tr, key: str) -> SaabKwp:
+    mods = modules.load()
+    if key not in mods:
+        sys.exit(f"Nezināms modulis '{key}'. Pieejami: {', '.join(mods)}")
+    m = mods[key]
+    if not m.known:
+        sys.exit(f"{key} adrese nav zināma. Palaidiet 'saab95 discover' un 'saab95 module-set {key} --target 0x..'.")
+    kwp = SaabKwp(tr, m.endpoint)
+    kwp.connect()
+    return kwp
+
+
+def cmd_modules(args, tr):
+    for m in modules.load().values():
+        addr = f"0x{m.endpoint.target:02X}" if m.known else "  ?  "
+        print(f"{m.key:<6} {addr}  {m.bus:<18} {m.name:<42} {m.status}")
+
+
+def cmd_module_set(args, tr):
+    patch = {"merkis": args.target, "statuss": "iestatīts manuāli"}
+    for k in ("init_tx", "init_rx", "req", "resp", "ack"):
+        if getattr(args, k):
+            patch[k] = getattr(args, k)
+    modules.save_user(args.key.upper(), patch)
+    print(f"Saglabāts {modules.USER_FILE}")
+
+
+def cmd_mod(args, tr):
+    key = args.key.upper()
+    m = modules.load()[key] if key in modules.load() else None
+    kwp = _module(tr, key)
+    act = args.action
+    if act == "dtc":
+        codes = kwp.read_dtcs()
+        for d in codes:
+            print(f"  {d.code}  {'AKTĪVS' if d.active else 'vēsturisks'}  st=0x{d.status:02X}  {obd2.DTC_HINTS.get(d.code, '')}")
+        if not codes:
+            print("Kļūdu kodu nav.")
+    elif act == "clear":
+        if confirm(args, f"Dzēst visus {key} kļūdu kodus?"):
+            kwp.clear_dtcs()
+            print("Izdzēsts.")
+    elif act == "read":
+        lid = parse_lid(args.arg[0])
+        raw = kwp.read_local_id(lid)
+        p = m.params.get(lid)
+        print(f"0x{lid:02X}: {p.decode(raw) if p else trionic7.printable(raw)}  [{raw.hex(' ').upper()}]")
+    elif act == "write":
+        lid = parse_lid(args.arg[0])
+        p = m.params.get(lid)
+        new = p.encode(args.arg[1]) if p and not args.arg[1].startswith(("ascii:", "hex:")) else parse_hex(args.arg[1].removeprefix("hex:"))
+        _write(args, kwp, key, lid, new)
+    elif act == "data":
+        for p in m.params.values():
+            print(f"  {p.name:<36} {p.decode(kwp.read_local_id(p.lid))}")
+    elif act == "scan":
+        found = actions.scan_lids(kwp)
+        out = Path(f"{key}_skenesana_{datetime.now():%Y-%m-%d}.json")
+        out.write_text(json.dumps({f"0x{k:02X}": v.hex(" ").upper() for k, v in found.items()}, indent=2), encoding="utf-8")
+        print(f"Saglabāts {out}")
+    elif act == "actuate":
+        name = " ".join(args.arg)
+        a = next((x for x in m.actuators if x.name.lower() == name.lower()), None)
+        if a is None:
+            sys.exit(f"Nav tāda testa. Pieejami: {', '.join(x.name for x in m.actuators) or 'nav definēti'}")
+        if confirm(args, f"Aktivizēt '{a.name}' uz {a.duration:g} s?"):
+            actions.actuate(kwp, a.lid, a.param, a.data, a.duration)
+
+
+def cmd_discover(args, tr):
+    print("Meklē moduļus (dzinējs IZSLĒGTS, aizdedze ON)...")
+    found = discovery.discover(tr, range(args.first, args.last + 1),
+                               progress=lambda t: print(f"\r  0x{t:02X}", end="", flush=True))
+    print()
+    for f in found:
+        print(f"  mērķis {f['merkis']}  KWP={'jā' if f['kwp'] else 'nē'}  {f['atbildes']}")
+    out = Path(f"atrastie_moduli_{datetime.now():%Y-%m-%d}.json")
+    out.write_text(json.dumps(found, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"Atrasti {len(found)}. Saglabāts {out}. Piešķiriet: saab95 module-set <MODULIS> --target 0x..")
+
+
+def cmd_monitor(args, tr):
+    rows = discovery.summarize(discovery.monitor(tr, args.seconds), args.seconds)
+    for r in rows:
+        print(f"  {r['id']}  {r['kadri']:>5}  {r['hz']:>6} Hz  {r['pedejie_dati']}")
+    if args.out:
+        Path(args.out).write_text(json.dumps(rows, indent=2), encoding="utf-8")
+
+
+def cmd_tech2(args, tr):
+    from .tech2 import Tech2
+
+    Tech2(tr).run()
 
 
 def cmd_t7_dump(args, tr):
@@ -236,6 +305,33 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-y", "--yes", action="store_true", help="neprasīt apstiprinājumu")
 
     sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("tech2", help="interaktīva Tech2 stila izvēlne").set_defaults(fn=cmd_tech2)
+    sub.add_parser("modules", help="moduļu saraksts").set_defaults(fn=cmd_modules)
+
+    s = sub.add_parser("mod", help="darbības ar moduli: dtc, clear, data, read, write, scan, actuate")
+    s.add_argument("key", help="ECM, TCM, ABS, SRS, MIU, SID, ACC, DICE, TWICE")
+    s.add_argument("action", choices=["dtc", "clear", "data", "read", "write", "scan", "actuate"])
+    s.add_argument("arg", nargs="*", help="read LID | write LID VĒRTĪBA | actuate NOSAUKUMS")
+    s.add_argument("--apply", action="store_true", help="write: tiešām ierakstīt")
+    s.set_defaults(fn=cmd_mod)
+
+    s = sub.add_parser("discover", help="meklēt moduļus kopnē")
+    s.add_argument("--first", type=lambda x: int(x, 0), default=0x01)
+    s.add_argument("--last", type=lambda x: int(x, 0), default=0xFF)
+    s.set_defaults(fn=cmd_discover)
+
+    s = sub.add_parser("monitor", help="pasīvi klausīties CAN kopni")
+    s.add_argument("--seconds", type=float, default=5.0)
+    s.add_argument("--out")
+    s.set_defaults(fn=cmd_monitor)
+
+    s = sub.add_parser("module-set", help="piešķirt modulim atrasto adresi")
+    s.add_argument("key")
+    s.add_argument("--target", required=True)
+    for k in ("init_tx", "init_rx", "req", "resp", "ack"):
+        s.add_argument(f"--{k.replace('_', '-')}", dest=k)
+    s.set_defaults(fn=cmd_module_set)
+
     sub.add_parser("info", help="VIN, atbalstītie PID, kļūdu kodi").set_defaults(fn=cmd_info)
 
     s = sub.add_parser("live", help="reāllaika dati")
@@ -279,10 +375,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    if args.cmd in ("modules", "module-set"):
+        args.fn(args, None)
+        return 0
     tr = open_transport(args)
     try:
         args.fn(args, tr)
-    except (obd2.ObdError, trionic7.KwpError, Exception) as e:  # noqa: BLE001
+    except Exception as e:  # noqa: BLE001
         if args.debug:
             raise
         print(f"Kļūda: {e}", file=sys.stderr)

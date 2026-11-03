@@ -18,3 +18,6 @@ saab95 = "saab95.cli:main"
 
 [tool.setuptools]
 packages = ["saab95"]
+
+[tool.setuptools.package-data]
+saab95 = ["moduli.json"]

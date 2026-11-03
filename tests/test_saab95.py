@@ -107,3 +107,79 @@ def test_elm_parse():
     e._parse("7E8 10 14 49 02 01 59 53 33\r7E8 21 45 48 35 39 47 35 37\r\rNO DATA")
     assert len(e._queue) == 2
     assert e.recv(0).data[:2] == bytes([0x10, 0x14])
+
+
+# ---------------- Tech2 funkcijas ----------------
+from saab95 import actions, discovery, modules  # noqa: E402
+from saab95.kwp import Endpoint, SaabKwp  # noqa: E402
+from saab95.tech2 import Tech2  # noqa: E402
+
+
+def test_discover_finds_modules(car):
+    found = discovery.discover(car, range(0x10, 0x30), timeout=0.05)
+    assert [f["merkis"] for f in found] == ["0x11", "0x28"]
+    assert all(f["kwp"] for f in found)
+
+
+def test_kwp_dtc_clear_and_actuate(car):
+    k = SaabKwp(car, Endpoint(target=0x28))
+    k.connect()
+    codes = k.read_dtcs()
+    assert [d.code for d in codes] == ["C1035", "C1040"]
+    assert codes[0].active and not codes[1].active
+    k.clear_dtcs()
+    assert k.read_dtcs() == []
+    actions.actuate(k, 0x20, 0x07, b"\x01", 0, out=lambda s: None)
+    assert car.io_log == [(0x28, 0x20, 0x07), (0x28, 0x20, 0x00)]
+
+
+def test_module_registry_user_override(tmp_path):
+    uf = tmp_path / "u.json"
+    assert not modules.load(uf)["ABS"].known
+    modules.save_user("ABS", {"merkis": "0x28", "parametri": {"0x10": {"nosaukums": "Režīms", "tips": "u8",
+                       "rakstams": True, "varianti": {"00": "Izslēgts", "01": "Ieslēgts"}}}}, uf)
+    m = modules.load(uf)["ABS"]
+    assert m.endpoint.target == 0x28 and m.endpoint.resp == 0x258
+    p = m.params[0x10]
+    assert p.decode(b"\x01") == "Ieslēgts"
+    assert p.encode("izslēgts") == b"\x00"
+
+
+def test_param_scaling():
+    p = modules.Param(0x01, "Temp", kind="u8", scale=1, offset=-40, unit="°C")
+    assert p.decode(b"\x82") == "90 °C"
+    assert p.encode("90") == b"\x82"
+
+
+def test_tech2_menu_session(car, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    uf = tmp_path / "moduli_lietotajs.json"
+    modules.save_user("ABS", {"merkis": "0x28", "aktivizacijas": [
+        {"nosaukums": "KP vārsts", "lid": "0x20", "dati": "01", "ilgums": 0}],
+        "parametri": {"0x10": {"nosaukums": "Režīms", "tips": "u8", "rakstams": True}}}, uf)
+    answers = iter([
+        "1",            # Vadības moduļi
+        "3",            # ABS (ECM, TCM, ABS)
+        "1",            # kļūdu kodi
+        "5", "1", "APSTIPRINU",          # aktivizēšana
+        "6", "1", "2", "APSTIPRINU",     # iestatījums 0x10 -> 2
+        "0", "0", "0",
+    ])
+    log = []
+    Tech2(car, lambda _: next(answers), log.append, uf).run()
+    text = "\n".join(log)
+    assert "C1035" in text and "AKTĪVS" in text
+    assert "Vadība atdota modulim." in text
+    assert "Ierakstīts un pārbaudīts" in text
+    assert car.modules[0x28]["lids"][0x10] == b"\x02"
+    assert list((tmp_path / "rezerves_kopijas").glob("ABS_lid_10_*.json"))
+
+
+def test_cli_modules_and_mod(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["modules"]) == 0
+    assert cli.main(["module-set", "abs", "--target", "0x28"]) == 0
+    assert cli.main(["--sim", "mod", "ABS", "dtc"]) == 0
+    assert "C1035" in capsys.readouterr().out
+    assert cli.main(["--sim", "mod", "ECM", "read", "0x90"]) == 0
+    assert SIM_VIN in capsys.readouterr().out

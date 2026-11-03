@@ -192,6 +192,25 @@ class Elm327Transport(Transport):
             self._cmd(f"ATCRA{arb_ids[0]:03X}")
             self._rx = arb_ids[0]
 
+    def monitor(self, seconds: float) -> list[CanFrame]:
+        """Pasīvā klausīšanās ar ATMA (lēti kloni var ziņot BUFFER FULL)."""
+        self._cmd("ATAR")
+        self._rx = None
+        self.ser.reset_input_buffer()
+        self.ser.write(b"ATMA\r")
+        end = time.monotonic() + seconds
+        buf = b""
+        while time.monotonic() < end:
+            buf += self.ser.read(self.ser.in_waiting or 1)
+        self.ser.write(b"\r")
+        time.sleep(0.2)
+        buf += self.ser.read(self.ser.in_waiting)
+        self._queue.clear()
+        self._parse(buf.decode("ascii", errors="replace").replace(">", ""))
+        frames = list(self._queue)
+        self._queue.clear()
+        return frames
+
     def close(self) -> None:
         try:
             self._cmd("ATPC")

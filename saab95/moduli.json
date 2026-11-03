@@ -1,0 +1,22 @@
+{
+  "_piezime": "Moduļi ar \"merkis\": null vēl nav atrasti. Palaidiet `saab95 discover` un piešķiriet adresi ar `saab95 module-set`. Lietotāja izmaiņas glabājas moduli_lietotajs.json.",
+  "ECM": {
+    "nosaukums": "Dzinēja vadība (Trionic 7)",
+    "kopne": "P-Bus 500 kbit/s",
+    "merkis": "0x11",
+    "init_tx": "0x220", "init_rx": "0x238", "req": "0x240", "resp": "0x258", "ack": "0x266",
+    "statuss": "protokols zināms (TrionicCANFlasher)",
+    "parametri": {
+      "0x90": {"nosaukums": "VIN", "tips": "ascii"}
+    },
+    "aktivizacijas": []
+  },
+  "TCM": {"nosaukums": "Automātiskā ātrumkārba", "kopne": "P-Bus 500 kbit/s", "merkis": null, "statuss": "jāatrod"},
+  "ABS": {"nosaukums": "ABS / TCS / ESP", "kopne": "P-Bus 500 kbit/s", "merkis": null, "statuss": "jāatrod"},
+  "SRS": {"nosaukums": "Drošības spilveni (SRS)", "kopne": "I-Bus 47,6 kbit/s", "merkis": null, "statuss": "jāatrod"},
+  "MIU": {"nosaukums": "Mērinstrumentu panelis (MIU)", "kopne": "I-Bus 47,6 kbit/s", "merkis": null, "statuss": "jāatrod"},
+  "SID": {"nosaukums": "Saab informācijas displejs (SID)", "kopne": "I-Bus 47,6 kbit/s", "merkis": null, "statuss": "jāatrod"},
+  "ACC": {"nosaukums": "Klimata kontrole (ACC)", "kopne": "I-Bus 47,6 kbit/s", "merkis": null, "statuss": "jāatrod"},
+  "DICE": {"nosaukums": "Paneļa centrālā elektronika (DICE)", "kopne": "I-Bus 47,6 kbit/s", "merkis": null, "statuss": "jāatrod"},
+  "TWICE": {"nosaukums": "Signalizācija / centrālā atslēga (TWICE)", "kopne": "I-Bus 47,6 kbit/s", "merkis": null, "statuss": "jāatrod"}
+}
