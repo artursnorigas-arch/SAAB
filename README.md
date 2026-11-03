@@ -91,6 +91,29 @@ Robežvērtības ir orientējošas. `--boost-max` iestatiet pēc sava auto speci
 
 Turbo virsspiedienu aprēķina no OBD datiem: MAP − atmosfēras spiediens. Standarta PID ir ierobežots līdz 255 kPa absolūtā spiediena, tātad aptuveni 1,5 bar virsspiediena. Ar stipri modificētu dzinēju šis ierobežojums var nogriezt maksimālo rādījumu.
 
+### Gāzes iekārta (LPG)
+
+Gāzes iekārtas vadības bloks ir atsevišķs, ar savu ražotāja programmu, un saab95 ar to nesazinās. Toties caur Trionic 7 var pārbaudīt, vai gāzes kalibrācija ir pareiza. Ja tā ir laba, degvielas korekcijām uz gāzes jābūt tādām pašām kā uz benzīna.
+
+1. Sasildiet dzinēju. Nobrauciet vienu un to pašu maršrutu divreiz, ar dažādām slodzēm (pilsēta, paātrinājumi ar turbo spiedienu):
+   ```bash
+   saab95 --elm COM5 live --preset aero --interval 0.2 --fuel benzins --csv 2026-11-03_benzins.csv
+   saab95 --elm COM5 live --preset aero --interval 0.2 --fuel lpg     --csv 2026-11-03_gaze.csv
+   ```
+2. Salīdziniet:
+   ```bash
+   saab95 lpg-compare 2026-11-03_benzins.csv 2026-11-03_gaze.csv
+   ```
+   Rezultāts ir tabula pa apgriezienu un turbo spiediena zonām:
+   - **"gāze par LIESU"**: gāzes padeve jāpalielina šajā zonā;
+   - **"gāze par BAGĀTU"**: gāzes padeve jāsamazina;
+   - **"apsteidze uz gāzes"**: Trionic 7 uz gāzes zem turbo spiediena atvelk aizdedzes apsteidzi.
+
+   Šo tabulu var parādīt gāzes iekārtas uzstādītājam.
+3. Tukšgaitas pārbaude uz gāzes: `saab95 --elm COM5 aero-check --fuel lpg`.
+
+Ilgtermiņa korekcija Trionic 7 ir kopīga abām degvielām. Pēc pārslēgšanās tai vajag dažas minūtes, lai pielāgotos, tāpēc žurnāla sākumu pēc degvielas maiņas labāk neņemt vērā.
+
 ## 5. Tech2 režīms (visi moduļi)
 
 ```bash

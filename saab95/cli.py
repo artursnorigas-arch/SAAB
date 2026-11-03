@@ -77,7 +77,7 @@ def cmd_live(args, tr):
     if args.csv:
         fh = open(args.csv, "w", newline="", encoding="utf-8")
         writer = csv.writer(fh)
-        writer.writerow(["laiks", *names, *(["boost"] if show_boost else [])])
+        writer.writerow(["laiks", *names, *(["boost"] if show_boost else []), "degviela"])
     i = 0
     try:
         while args.count == 0 or i < args.count:
@@ -98,7 +98,7 @@ def cmd_live(args, tr):
                 print(f"  {'Turbo virsspiediens':<34} {b:>9.2f} bar")
                 extra = [f"{b:.3f}"]
             if writer:
-                writer.writerow([stamp, *(f"{row[n]:.2f}" for n in names), *extra])
+                writer.writerow([stamp, *(f"{row[n]:.2f}" for n in names), *extra, args.fuel])
                 fh.flush()
             i += 1
             time.sleep(args.interval)
@@ -111,14 +111,25 @@ def cmd_live(args, tr):
 
 def cmd_aero_check(args, tr):
     print("Saab 9-5 2.3t Aero veselības pārbaude (dzinējs sasilis, tukšgaitā)\n")
+    if args.fuel == "lpg":
+        print("Degviela: GĀZE – korekcijas vērtējiet salīdzinājumā ar benzīnu.\n")
     for f in aero.health_check(obd2.Obd2(tr)):
         print(f)
+    if args.fuel == "lpg":
+        for f in aero.LPG_ADVICE:
+            print(f)
 
 
 def cmd_analyze(args, tr):
     print(f"Brauciena analīze: {args.file}\n")
     for f in aero.analyze_log(args.file, args.boost_max):
         print(f)
+
+
+def cmd_lpg_compare(args, tr):
+    print(f"Benzīns: {args.petrol}\nGāze:    {args.lpg}\n")
+    for line in aero.compare_fuels(args.petrol, args.lpg, tolerance=args.tolerance):
+        print(line)
 
 
 def cmd_dtc(args, tr):
@@ -358,9 +369,18 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--count", type=int, default=0, help="0 = līdz Ctrl+C")
     s.add_argument("--csv", help="saglabāt žurnālu CSV failā")
     s.add_argument("--preset", choices=["aero"], help="aero = turbo dzinēja parametri + turbo virsspiediens")
+    s.add_argument("--fuel", choices=["benzins", "lpg"], default="benzins", help="ar kuru degvielu brauc (atzīme žurnālā)")
     s.set_defaults(fn=cmd_live)
 
-    sub.add_parser("aero-check", help="2.3t Aero veselības pārbaude tukšgaitā").set_defaults(fn=cmd_aero_check)
+    s = sub.add_parser("aero-check", help="2.3t Aero veselības pārbaude tukšgaitā")
+    s.add_argument("--fuel", choices=["benzins", "lpg"], default="benzins")
+    s.set_defaults(fn=cmd_aero_check)
+
+    s = sub.add_parser("lpg-compare", help="salīdzināt benzīna un gāzes braucienu (gāzes kalibrācijas pārbaude)")
+    s.add_argument("petrol", help="CSV ar benzīnu")
+    s.add_argument("lpg", help="CSV ar gāzi")
+    s.add_argument("--tolerance", type=float, default=5.0, help="pieļaujamā starpība, %% (noklusējums 5)")
+    s.set_defaults(fn=cmd_lpg_compare)
     s = sub.add_parser("analyze", help="analizēt brauciena CSV žurnālu (bez adaptera)")
     s.add_argument("file")
     s.add_argument("--boost-max", type=float, help="brīdināt, ja virsspiediens pārsniedz (bar)")
@@ -400,7 +420,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
-    if args.cmd in ("modules", "module-set", "analyze"):
+    if args.cmd in ("modules", "module-set", "analyze", "lpg-compare"):
         args.fn(args, None)
         return 0
     tr = open_transport(args)

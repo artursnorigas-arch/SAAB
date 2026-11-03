@@ -214,3 +214,27 @@ def test_cli_live_aero_preset(tmp_path, monkeypatch, capsys):
     assert "Turbo virsspiediens" in capsys.readouterr().out
     assert cli.main(["analyze", "a.csv"]) == 0
     assert cli.main(["--sim", "aero-check"]) == 0
+
+
+def _write_log(path, rows):
+    path.write_text("laiks,rpm,map,baro,timing,coolant,stft,ltft,degviela\n" +
+                    "".join(f"{i},{r},{m},101,{t},90,{s},{lt},x\n" for i, (r, m, t, s, lt) in enumerate(rows)),
+                    encoding="utf-8")
+
+
+def test_lpg_compare(tmp_path):
+    petrol, lpg = tmp_path / "b.csv", tmp_path / "g.csv"
+    _write_log(petrol, [(2000, 40, 20, 1, 2)] * 6 + [(4000, 190, 10, 0, 2)] * 6)
+    _write_log(lpg, [(2000, 40, 20, 2, 2)] * 6 + [(4000, 190, 5, 9, 2)] * 6)
+    out = "\n".join(aero.compare_fuels(petrol, lpg))
+    assert "par LIESU" in out and "apsteidze uz gāzes -5.0°" in out
+    assert out.count("✓") == 1  # vakuuma zona sakrīt
+
+
+def test_cli_lpg(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["--sim", "live", "--preset", "aero", "--fuel", "lpg", "--count", "1", "--interval", "0", "--csv", "g.csv"]) == 0
+    assert (tmp_path / "g.csv").read_text().splitlines()[1].endswith(",lpg")
+    assert cli.main(["--sim", "aero-check", "--fuel", "lpg"]) == 0
+    assert "Gāze: aizdedze" in capsys.readouterr().out
+    assert cli.main(["lpg-compare", "g.csv", "g.csv"]) == 0

@@ -154,3 +154,82 @@ def analyze_log(path: str | Path, boost_max: float | None = None) -> list[Findin
         lvl = "UZMANĪBU" if abs(avg) > 10 else "OK"
         f.append(Finding(lvl, "Vid. degvielas korekcija (silts)", f"{avg:+.1f}%"))
     return f
+
+
+# ---------------- Gāzes iekārta (LPG) ----------------
+RPM_BINS = [(0, 1500), (1500, 2500), (2500, 3500), (3500, 4500), (4500, 7000)]
+BOOST_BINS = [(-1.5, 0.0, "vakuums"), (0.0, 0.5, "0–0,5 bar"), (0.5, 3.0, ">0,5 bar")]
+
+
+def _load_rows(path):
+    with open(path, encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    out = []
+    for r in rows:
+        try:
+            d = {k: float(r[k]) for k in ("rpm", "map", "stft", "ltft", "coolant")}
+            d["baro"] = float(r.get("baro") or 101.3)
+            d["timing"] = float(r.get("timing") or "nan")
+        except (KeyError, ValueError):
+            continue
+        if d["coolant"] >= 80 and not math.isnan(d["stft"] + d["ltft"]):
+            out.append(d)
+    return out
+
+
+def _bin_stats(rows):
+    stats = {}
+    for r in rows:
+        b = boost_bar(r["map"], r["baro"])
+        for lo, hi in RPM_BINS:
+            if not lo <= r["rpm"] < hi:
+                continue
+            for blo, bhi, bname in BOOST_BINS:
+                if blo <= b < bhi:
+                    stats.setdefault((lo, hi, bname), []).append(r)
+    res = {}
+    for k, rs in stats.items():
+        trim = sum(r["stft"] + r["ltft"] for r in rs) / len(rs)
+        tim = [r["timing"] for r in rs if not math.isnan(r["timing"])]
+        res[k] = (len(rs), trim, sum(tim) / len(tim) if tim else math.nan)
+    return res
+
+
+def compare_fuels(petrol_csv, lpg_csv, min_samples: int = 5, tolerance: float = 5.0) -> list[str]:
+    """Salīdzina degvielas korekcijas benzīnam un gāzei vienādos apgriezienu/slodzes apgabalos.
+
+    Ja uz gāzes korekcija ir lielāka (+), gāzes kalibrācija šajā zonā ir par liesu,
+    ja mazāka (−) – par bagātu. To labo gāzes iekārtas uzstādītājs ar tās programmu.
+    """
+    p, g = _bin_stats(_load_rows(petrol_csv)), _bin_stats(_load_rows(lpg_csv))
+    lines = [f"{'Apgriezieni':<12}{'Slodze':<12}{'Benzīns':>9}{'Gāze':>9}{'Starpība':>10}  Vērtējums",
+             "-" * 72]
+    bad = 0
+    for key in sorted(set(p) & set(g), key=lambda k: (k[0], k[2])):
+        (np_, tp, ap), (ng, tg, ag) = p[key], g[key]
+        if np_ < min_samples or ng < min_samples:
+            continue
+        diff = tg - tp
+        if diff > tolerance:
+            verdict, bad = "✗ gāze par LIESU – palielināt gāzes padevi šajā zonā", bad + 1
+        elif diff < -tolerance:
+            verdict, bad = "✗ gāze par BAGĀTU – samazināt gāzes padevi", bad + 1
+        else:
+            verdict = "✓"
+        if not math.isnan(ap) and not math.isnan(ag) and key[2] == ">0,5 bar" and ag < ap - 3:
+            verdict += f"  ! apsteidze uz gāzes {ag - ap:+.1f}° (detonācija/izlaidumi?)"
+        lines.append(f"{key[0]:>4}–{key[1]:<7}{key[2]:<12}{tp:>+8.1f}%{tg:>+8.1f}%{diff:>+9.1f}%  {verdict}")
+    if len(lines) == 2:
+        lines.append("Nepietiek kopīgu datu. Brauciet vienu un to pašu maršrutu ar abām degvielām, dzinējs sasilis.")
+    else:
+        lines.append("")
+        lines.append("Gāzes kalibrācija atbilst benzīnam." if not bad else
+                     f"{bad} zonā(s) gāzes kalibrācija atšķiras vairāk par ±{tolerance:g}%. Šo tabulu parādiet gāzes iekārtas uzstādītājam.")
+    return lines
+
+
+LPG_ADVICE = [
+    Finding("INFO", "Gāze: korekcijas", "salīdziniet korekcijas uz benzīna un gāzes: `saab95 lpg-compare`"),
+    Finding("INFO", "Gāze: aizdedze", "gāzei vajag augstāku aizdedzes spriegumu – izlaidumi (P0300–P0304) zem turbo spiediena bieži nozīmē svecītes/DI kaseti"),
+    Finding("INFO", "Gāze: iztvaicētājs", "auksts iztvaicētājs vai netīrs gāzes filtrs dod liesu maisījumu zem slodzes"),
+]
