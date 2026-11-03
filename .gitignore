@@ -1,0 +1,7 @@
+__pycache__/
+*.egg-info/
+.pytest_cache/
+rezerves_kopijas/
+*.bin
+t7_skenesana_*.json
+*.csv

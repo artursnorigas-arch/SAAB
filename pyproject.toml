@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "saab95"
+version = "0.1.0"
+description = "Saab 9-5 (2007) diagnostika un uzstādījumi: OBD-II + Trionic 7"
+requires-python = ">=3.10"
+dependencies = ["pyserial>=3.5"]
+
+[project.optional-dependencies]
+can = ["python-can>=4.0"]
+dev = ["pytest"]
+
+[project.scripts]
+saab95 = "saab95.cli:main"
+
+[tool.setuptools]
+packages = ["saab95"]
