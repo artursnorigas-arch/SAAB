@@ -22,6 +22,25 @@ Trionic 7 ir benzīna dzinēju (2.0t / 2.3t / Aero, B205/B235) ECU. Dīzeļa ver
 
 P-Bus (dzinēja CAN, 500 kbit/s) ir OBD ligzdā uz **6. (CAN-H) un 14. (CAN-L)** kontakta.
 
+### ELM327 Wi-Fi adapteris (pieslēgšanās)
+
+1. Iespraudiet adapteri OBD ligzdā (zem stūres, pa kreisi) un ieslēdziet aizdedzi (ON).
+2. Datorā pieslēdzieties adaptera Wi-Fi tīklam (parasti `WiFi_OBDII` vai `OBDII`, bez paroles).
+3. Pārbaudiet savienojumu:
+   ```bash
+   saab95 --wifi adapter-test
+   ```
+   Noklusējuma adrese ir `192.168.0.10:35000`. Ja Jūsu adapterim tā ir cita, norādiet: `saab95 --wifi 192.168.0.123:35000 adapter-test`.
+4. Pēc tam visās komandās `--elm COM5` vietā rakstiet `--wifi`.
+
+`adapter-test` parāda adaptera versiju, akumulatora spriegumu, vai darbojas OBD-II un Trionic 7, kā arī kuras ELM funkcijas klons neatbalsta.
+
+Lēti kloni bieži neatbalsta pilnu komandu kopu. Rīks to nosaka automātiski:
+- **Pilnais režīms** (klons atbalsta `ATCAF0`): pieejams viss, arī Trionic 7.
+- **Ierobežotais režīms**: pieejams tikai OBD-II (`info`, `live`, `dtc`, `aero-check`, `lpg-compare`). Trionic 7 funkcijām tad vajag OBDLink SX vai citu kvalitatīvu adapteri.
+
+Wi-Fi savienojums ir lēnāks par USB. `live` režīmā reāli sanāk ~3–8 nolasījumi sekundē (visiem parametriem kopā), tāpēc `--interval 0.2` ir pietiekami.
+
 ## 2. Uzstādīšana
 
 ```bash
@@ -34,7 +53,8 @@ pip install -e .[can]       # + python-can (CANUSB, Kvaser, PCAN)
 Adapteri norāda pirms komandas:
 
 ```bash
-saab95 --elm COM5 info                                   # Windows, ELM327
+saab95 --wifi info                                       # ELM327 Wi-Fi
+saab95 --elm COM5 info                                   # Windows, ELM327 USB/Bluetooth
 saab95 --elm /dev/ttyUSB0 info                           # Linux/Mac
 saab95 --can slcan --channel COM6 info                   # Lawicel CANUSB
 saab95 --can pcan --channel PCAN_USBBUS1 info

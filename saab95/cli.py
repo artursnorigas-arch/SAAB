@@ -11,7 +11,7 @@ from pathlib import Path
 
 from . import __version__, actions, aero, discovery, modules, obd2, trionic7
 from .kwp import SaabKwp
-from .transport import Elm327Transport, PythonCanTransport, Transport
+from .transport import WIFI_DEFAULT, Elm327Transport, PythonCanTransport, Transport
 
 CONFIRM_WORD = actions.CONFIRM_WORD
 
@@ -21,12 +21,16 @@ def open_transport(args) -> Transport:
         from .simulator import SimulatedCar
 
         tr: Transport = SimulatedCar()
-    elif args.elm:
-        tr = Elm327Transport(args.elm, baudrate=args.elm_baud)
+    elif args.elm or args.wifi:
+        port = args.elm or args.wifi
+        print(f"Pieslēdzas ELM327: {port} ...", file=sys.stderr)
+        tr = Elm327Transport(port, baudrate=args.elm_baud)
+        if not tr.raw_can:
+            print("! Adapteris darbojas IEROBEŽOTĀ režīmā: tikai OBD-II (Trionic 7 nav pieejams).", file=sys.stderr)
     elif args.can:
         tr = PythonCanTransport(args.can, args.channel, bitrate=args.bitrate)
     else:
-        sys.exit("Norādiet adapteri: --elm PORTS, --can INTERFEISS --channel KANĀLS vai --sim")
+        sys.exit("Norādiet adapteri: --wifi, --elm PORTS, --can INTERFEISS --channel KANĀLS vai --sim")
     tr.debug = args.debug
     return tr
 
@@ -107,6 +111,28 @@ def cmd_live(args, tr):
     finally:
         if fh:
             fh.close()
+
+
+def cmd_adapter_test(args, tr):
+    """Pārbauda adapteri un savienojumu ar auto soli pa solim."""
+    if isinstance(tr, Elm327Transport):
+        print(f"Adapteris:        {tr.version}")
+        print(f"Akumulators:      {tr.voltage()}")
+        print(f"Neapstrādāts CAN: {'jā' if tr.raw_can else 'NĒ – tikai OBD-II'}")
+    o = obd2.Obd2(tr)
+    try:
+        print(f"OBD-II:           ✓ VIN {o.read_vin()}")
+    except Exception as e:  # noqa: BLE001
+        print(f"OBD-II:           ✗ {e}  (aizdedze ON? 2007. g. EU modelim jāatbild uz CAN 500k)")
+        return
+    try:
+        t = _t7(tr)
+        print(f"Trionic 7:        ✓ {t.identify()}")
+    except Exception as e:  # noqa: BLE001
+        print(f"Trionic 7:        ✗ {e}")
+    if isinstance(tr, Elm327Transport):
+        missing = [k for k, v in tr.caps.items() if not v]
+        print(f"Neatbalstītās ELM funkcijas: {', '.join(missing) or 'nav'}")
 
 
 def cmd_aero_check(args, tr):
@@ -324,7 +350,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="saab95", description=__doc__)
     p.add_argument("--version", action="version", version=__version__)
     a = p.add_argument_group("adapteris")
-    a.add_argument("--elm", metavar="PORTS", help="ELM327 seriālais ports, piem. COM5 vai /dev/ttyUSB0")
+    a.add_argument("--wifi", nargs="?", const=WIFI_DEFAULT, metavar="IP:PORTS",
+                   help=f"ELM327 Wi-Fi (noklusējums {WIFI_DEFAULT})")
+    a.add_argument("--elm", metavar="PORTS", help="ELM327 ports: COM5, /dev/ttyUSB0 vai 192.168.0.10:35000")
     a.add_argument("--elm-baud", type=int, default=38400)
     a.add_argument("--can", metavar="INTERFEISS", help="python-can interfeiss: slcan, kvaser, pcan, socketcan...")
     a.add_argument("--channel", default="can0", help="python-can kanāls (piem. COM6, PCAN_USBBUS1, can0)")
@@ -334,6 +362,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-y", "--yes", action="store_true", help="neprasīt apstiprinājumu")
 
     sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("adapter-test", help="pārbaudīt adapteri un savienojumu").set_defaults(fn=cmd_adapter_test)
     sub.add_parser("tech2", help="interaktīva Tech2 stila izvēlne").set_defaults(fn=cmd_tech2)
     sub.add_parser("modules", help="moduļu saraksts").set_defaults(fn=cmd_modules)
 

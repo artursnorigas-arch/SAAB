@@ -238,3 +238,38 @@ def test_cli_lpg(tmp_path, monkeypatch, capsys):
     assert cli.main(["--sim", "aero-check", "--fuel", "lpg"]) == 0
     assert "Gāze: aizdedze" in capsys.readouterr().out
     assert cli.main(["lpg-compare", "g.csv", "g.csv"]) == 0
+
+
+# ---------------- ELM327 Wi-Fi (pa TCP) ----------------
+from tests.elm_emulator import ElmEmulator  # noqa: E402
+from saab95.transport import Elm327Transport, TransportError  # noqa: E402
+
+
+def test_wifi_full_clone():
+    emu = ElmEmulator(supports_caf0=True)
+    tr = Elm327Transport(f"127.0.0.1:{emu.port}")
+    assert tr.raw_can and tr.version == "ELM327 v1.5"
+    assert obd2.Obd2(tr).read_vin() == SIM_VIN
+    t = trionic7.Trionic7(tr)
+    t.connect()
+    assert t.read_local_id(0x90) == SIM_VIN.encode()
+    tr.close()
+
+
+def test_wifi_limited_clone_obd_only():
+    emu = ElmEmulator(supports_caf0=False)
+    tr = Elm327Transport(f"127.0.0.1:{emu.port}")
+    assert not tr.raw_can
+    o = obd2.Obd2(tr)
+    assert o.read_vin() == SIM_VIN
+    assert o.read_dtcs() == ["P0171", "P1105"]
+    assert o.read_pid("coolant") == 89
+    with pytest.raises(TransportError, match="ATCAF0"):
+        trionic7.Trionic7(tr).connect()
+
+
+def test_cli_wifi_adapter_test(capsys):
+    emu = ElmEmulator()
+    assert cli.main(["--wifi", f"127.0.0.1:{emu.port}", "adapter-test"]) == 0
+    out = capsys.readouterr().out
+    assert "✓ VIN" in out and "Trionic 7:        ✓" in out
