@@ -64,19 +64,29 @@ def decode_dtc(b1: int, b2: int) -> str:
     return f"{letter}{(b1 >> 4) & 0x3}{b1 & 0xF:X}{b2 >> 4:X}{b2 & 0xF:X}"
 
 
-# Biežākie Saab specifiskie kodi (T7). Pilnu sarakstu skat. Saab servisa dokumentācijā.
+# Standarta (SAE) kodu skaidrojumi. Saab P1xxx kodus skatiet Saab WIS dokumentācijā.
 DTC_HINTS = {
-    "P0105": "MAP sensors",
-    "P0171": "Maisījums par liesu",
+    "P0101": "MAF sensora diapazons",
+    "P0105": "MAP sensora ķēde",
+    "P0106": "MAP sensora diapazons",
+    "P0110": "Ieplūdes gaisa temp. sensors",
+    "P0115": "Dzesēšanas temp. sensors",
+    "P0130": "Lambda zonde (1. sensors)",
+    "P0171": "Maisījums par liesu – bieži gaisa noplūde (PCV, šļūtenes)",
     "P0172": "Maisījums par bagātu",
-    "P0300": "Izlaidumi (vairāki cilindri)",
+    "P0234": "Turbo virsspiediens (overboost)",
+    "P0300": "Izlaidumi vairākos cilindros – Aero: bieži DI kasete/svecītes",
+    "P0301": "Izlaidumi 1. cilindrā",
+    "P0302": "Izlaidumi 2. cilindrā",
+    "P0303": "Izlaidumi 3. cilindrā",
+    "P0304": "Izlaidumi 4. cilindrā",
+    "P0335": "Kloķvārpstas stāvokļa sensors",
     "P0420": "Katalizatora efektivitāte zema",
-    "P1105": "Atmosfēras spiediena sensors (Saab)",
-    "P1110": "Turbo spiediena vārsts (BPC) (Saab)",
-    "P1115": "Turbo spiediena regulēšana (Saab)",
-    "P1130": "Lambda zondes signāls (Saab)",
-    "P1321": "Aizdedzes kasete (DI) – detonācijas signāls (Saab)",
-    "P1334": "Aizdedzes kasete (DI) – sinhronizācija (Saab)",
+    "P0443": "EVAP attīrīšanas vārsts",
+    "P0506": "Tukšgaitas apgriezieni par zemu",
+    "P0507": "Tukšgaitas apgriezieni par augstu",
+    "P0562": "Sistēmas spriegums zems",
+    "P0606": "ECM iekšēja kļūda",
 }
 
 

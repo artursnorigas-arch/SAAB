@@ -1,7 +1,7 @@
 {
   "_piezime": "Moduļi ar \"merkis\": null vēl nav atrasti. Palaidiet `saab95 discover` un piešķiriet adresi ar `saab95 module-set`. Lietotāja izmaiņas glabājas moduli_lietotajs.json.",
   "ECM": {
-    "nosaukums": "Dzinēja vadība (Trionic 7)",
+    "nosaukums": "Dzinēja vadība (Trionic 7, B235R 2.3t Aero)",
     "kopne": "P-Bus 500 kbit/s",
     "merkis": "0x11",
     "init_tx": "0x220", "init_rx": "0x238", "req": "0x240", "resp": "0x258", "ack": "0x266",

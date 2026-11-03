@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from . import actions, discovery, modules, obd2
+from . import actions, aero, discovery, modules, obd2
 from .kwp import KwpError, SaabKwp, printable
 from .transport import Transport
 
@@ -182,7 +182,7 @@ class Tech2:
     def obd_menu(self) -> None:
         o = obd2.Obd2(self.tr)
         while True:
-            c = self.menu("OBD-II", ["VIN", "Kļūdu kodi", "Dzēst kļūdu kodus", "Reāllaika dati"])
+            c = self.menu("OBD-II", ["VIN", "Kļūdu kodi", "Dzēst kļūdu kodus", "Reāllaika dati", "Aero veselības pārbaude"])
             if c == 0:
                 return
             if c == 1:
@@ -197,6 +197,9 @@ class Tech2:
                 for p in obd2.PIDS.values():
                     if p.pid in sup:
                         self.out(f"  {p.title:<34} {o.read_pid(p.name):>9.1f} {p.unit}")
+            elif c == 5:
+                for f in aero.health_check(o):
+                    self.out(str(f))
 
     def discover_menu(self) -> None:
         self.out("Sūta sesijas pieprasījumu adresēm 0x01..0xFF. Dzinējs IZSLĒGTS, aizdedze ON.")

@@ -9,7 +9,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from . import __version__, actions, discovery, modules, obd2, trionic7
+from . import __version__, actions, aero, discovery, modules, obd2, trionic7
 from .kwp import SaabKwp
 from .transport import Elm327Transport, PythonCanTransport, Transport
 
@@ -64,19 +64,20 @@ def cmd_info(args, tr):
 
 def cmd_live(args, tr):
     o = obd2.Obd2(tr)
-    names = args.pids.split(",") if args.pids else None
+    names = args.pids.split(",") if args.pids else (list(aero.PRESET) if args.preset == "aero" else None)
     if names is None:
         sup = o.supported_pids()
         names = [p.name for p in obd2.PIDS.values() if p.pid in sup]
     for n in names:
         if n not in obd2.PIDS:
             sys.exit(f"Nezināms PID '{n}'. Pieejami: {', '.join(obd2.PIDS)}")
+    show_boost = "map" in names and "baro" in names
     writer = None
     fh = None
     if args.csv:
         fh = open(args.csv, "w", newline="", encoding="utf-8")
         writer = csv.writer(fh)
-        writer.writerow(["laiks", *names])
+        writer.writerow(["laiks", *names, *(["boost"] if show_boost else [])])
     i = 0
     try:
         while args.count == 0 or i < args.count:
@@ -91,8 +92,13 @@ def cmd_live(args, tr):
             for n in names:
                 p = obd2.PIDS[n]
                 print(f"  {p.title:<34} {row[n]:>9.1f} {p.unit}")
+            extra = []
+            if show_boost:
+                b = aero.boost_bar(row["map"], row["baro"])
+                print(f"  {'Turbo virsspiediens':<34} {b:>9.2f} bar")
+                extra = [f"{b:.3f}"]
             if writer:
-                writer.writerow([stamp, *(f"{row[n]:.2f}" for n in names)])
+                writer.writerow([stamp, *(f"{row[n]:.2f}" for n in names), *extra])
                 fh.flush()
             i += 1
             time.sleep(args.interval)
@@ -101,6 +107,18 @@ def cmd_live(args, tr):
     finally:
         if fh:
             fh.close()
+
+
+def cmd_aero_check(args, tr):
+    print("Saab 9-5 2.3t Aero veselības pārbaude (dzinējs sasilis, tukšgaitā)\n")
+    for f in aero.health_check(obd2.Obd2(tr)):
+        print(f)
+
+
+def cmd_analyze(args, tr):
+    print(f"Brauciena analīze: {args.file}\n")
+    for f in aero.analyze_log(args.file, args.boost_max):
+        print(f)
 
 
 def cmd_dtc(args, tr):
@@ -339,7 +357,14 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--interval", type=float, default=0.5)
     s.add_argument("--count", type=int, default=0, help="0 = līdz Ctrl+C")
     s.add_argument("--csv", help="saglabāt žurnālu CSV failā")
+    s.add_argument("--preset", choices=["aero"], help="aero = turbo dzinēja parametri + turbo virsspiediens")
     s.set_defaults(fn=cmd_live)
+
+    sub.add_parser("aero-check", help="2.3t Aero veselības pārbaude tukšgaitā").set_defaults(fn=cmd_aero_check)
+    s = sub.add_parser("analyze", help="analizēt brauciena CSV žurnālu (bez adaptera)")
+    s.add_argument("file")
+    s.add_argument("--boost-max", type=float, help="brīdināt, ja virsspiediens pārsniedz (bar)")
+    s.set_defaults(fn=cmd_analyze)
 
     s = sub.add_parser("dtc", help="kļūdu kodi")
     s.add_argument("--clear", action="store_true", help="dzēst kļūdu kodus")
@@ -375,7 +400,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
-    if args.cmd in ("modules", "module-set"):
+    if args.cmd in ("modules", "module-set", "analyze"):
         args.fn(args, None)
         return 0
     tr = open_transport(args)

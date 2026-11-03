@@ -67,7 +67,31 @@ saab95 --can slcan --channel COM6 t7-dump mans_ecu.bin     # 512 KB programmatū
 
 **Ieteicamā secība pirmajā reizē:** `info` → `t7-info` → `t7-scan` → `t7-dump`. Pēc tam ir rezerves kopijas un pilns saraksts, ko ECU atļauj nolasīt.
 
-## 4. Tech2 režīms (visi moduļi)
+## 4. Saab 9-5 2.3t Aero (B235R, Trionic 7)
+
+```bash
+saab95 --elm COM5 aero-check                                     # veselības pārbaude tukšgaitā, dzinējs sasilis
+saab95 --elm COM5 live --preset aero                             # turbo dzinēja parametri + turbo virsspiediens (bar)
+saab95 --elm COM5 live --preset aero --interval 0.2 --csv 2026-11-03_brauciens.csv
+saab95 analyze 2026-11-03_brauciens.csv --boost-max 1.2          # brauciena analīze (bez adaptera)
+```
+
+**`aero-check`** pārbauda:
+- tukšgaitas apgriezienus un dzesēšanas temperatūru;
+- degvielas korekcijas: liess maisījums Aero dzinējam bieži nozīmē gaisa noplūdi PCV sistēmā, šļūtenēs vai interkūlerā;
+- vakuumu tukšgaitā, uzlādes spriegumu un kļūdu kodus.
+
+**`analyze`** no brauciena žurnāla aprēķina:
+- maksimālo turbo virsspiedienu;
+- ieplūdes gaisa maksimālo temperatūru (interkūlera efektivitāti);
+- apsteidzi zem turbo spiediena: ja Trionic 7 to atvelk, tas var liecināt par detonāciju (degvielas kvalitāte, DI kasete, svecītes);
+- vidējās degvielas korekcijas.
+
+Robežvērtības ir orientējošas. `--boost-max` iestatiet pēc sava auto specifikācijas.
+
+Turbo virsspiedienu aprēķina no OBD datiem: MAP − atmosfēras spiediens. Standarta PID ir ierobežots līdz 255 kPa absolūtā spiediena, tātad aptuveni 1,5 bar virsspiediena. Ar stipri modificētu dzinēju šis ierobežojums var nogriezt maksimālo rādījumu.
+
+## 5. Tech2 režīms (visi moduļi)
 
 ```bash
 saab95 --elm COM5 tech2          # interaktīva izvēlne kā Tech2
@@ -139,20 +163,20 @@ Tipi: `ascii`, `hex`, `u8`, `s8`, `u16`, `s16`, `u32`. Vērtība = neapstrādāt
 
 **Svarīgi:** `0x28` šeit ir tikai piemērs (simulatora fiktīvā adrese). Īstās adreses jāatrod uz mašīnas.
 
-## 5. Drošības mehānismi
+## 6. Drošības mehānismi
 
 - Rakstīšana pēc noklusējuma ir **sausais režīms**: tā tikai parāda pašreizējo un jauno vērtību.
 - Ar `--apply` rīks vispirms saglabā veco vērtību mapē `rezerves_kopijas/`, tad prasa ierakstīt `APSTIPRINU`, ieraksta un pārbauda, nolasot vērtību atpakaļ.
 - Pirms rakstīšanas: aizdedzei jābūt ON, dzinējam izslēgtam, akumulatoram uzlādētam (vēlams lādētājs).
 - Ar `--debug` var redzēt katru CAN kadru.
 
-## 6. Ko rīks NEDARA un kāpēc
+## 7. Ko rīks NEDARA un kāpēc
 
 - **Netaisa T7 programmatūras pārrakstīšanu (flash/tūnings).** Ja kļūda notiek šī procesa vidū, ECU var palikt nedarbspējīgs. Tūningam lietojiet pārbaudītos atvērtā koda rīkus: **T7Suite** (karšu rediģēšana `.bin` failā, ko izveido `t7-dump`) un **TrionicCANFlasher** (ierakstīšana).
 - **Neprogrammē atslēgas un imobilaizeru.** Tam Tech2 vajadzīgs Saab drošības kods no servisa sistēmas.
 - **Neizslēdz emisiju kontroli** (katalizators, lambda, EGR). Ceļu satiksmē tas ir nelikumīgi, un tehniskajā apskatē to konstatēs.
 
-## 7. Ja nestrādā
+## 8. Ja nestrādā
 
 - `Nav atbildes no 7E8`: pārbaudiet, vai aizdedze ir ON. Lētajam ELM327 izmēģiniet `--elm-baud 115200` vai `9600`.
 - `Trionic 7 neatbild`: ECU var nebūt T7 (dīzelis), vai adapteris neatbalsta neapstrādātu CAN režīmu (`ATCAF0`).

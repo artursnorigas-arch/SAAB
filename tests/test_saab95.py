@@ -183,3 +183,34 @@ def test_cli_modules_and_mod(tmp_path, monkeypatch, capsys):
     assert "C1035" in capsys.readouterr().out
     assert cli.main(["--sim", "mod", "ECM", "read", "0x90"]) == 0
     assert SIM_VIN in capsys.readouterr().out
+
+
+# ---------------- 2.3t Aero ----------------
+from saab95 import aero  # noqa: E402
+
+
+def test_aero_health_check(car):
+    res = {f.title: f for f in aero.health_check(obd2.Obd2(car))}
+    assert res["Dzesēšanas šķidrums"].level == "OK"
+    assert res["Kļūdu kodi"].level == "PROBLĒMA" and "P0171" in res["Kļūdu kodi"].detail
+
+
+def test_aero_analyze(tmp_path):
+    p = tmp_path / "b.csv"
+    p.write_text(
+        "laiks,rpm,map,baro,iat,timing,coolant,load,throttle,stft,ltft,voltage\n"
+        "1,850,35,101,30,12,90,20,0,1,2,14.1\n"
+        "2,4200,205,101,48,8,92,95,100,0,2,14.0\n"
+        "3,4800,212,101,55,-2,93,98,100,0,2,14.0\n", encoding="utf-8")
+    res = {f.title: f for f in aero.analyze_log(p, boost_max=1.05)}
+    assert res["Maks. turbo virsspiediens"].detail.startswith("1.11")
+    assert res["Maks. turbo virsspiediens"].level == "PROBLĒMA"
+    assert res["Apsteidze zem turbo spiediena"].level == "UZMANĪBU"
+
+
+def test_cli_live_aero_preset(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["--sim", "live", "--preset", "aero", "--count", "2", "--interval", "0", "--csv", "a.csv"]) == 0
+    assert "Turbo virsspiediens" in capsys.readouterr().out
+    assert cli.main(["analyze", "a.csv"]) == 0
+    assert cli.main(["--sim", "aero-check"]) == 0
