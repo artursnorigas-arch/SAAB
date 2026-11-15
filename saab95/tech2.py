@@ -149,7 +149,13 @@ class Tech2:
     def settings(self, kwp: SaabKwp, m) -> None:
         writable = [p for p in m.params.values() if p.writable]
         if not writable:
-            self.out("Rakstāmi parametri nav definēti ('rakstams': true moduli_lietotajs.json).")
+            if m.tech2_settings:
+                self.out(f"Tech2 uzstādījumi pēc Saab WIS ({len(m.tech2_settings)}). Identifikatori vēl nav atrasti,")
+                self.out("tāpēc mainīt tos pagaidām nevar:")
+                for st in m.tech2_settings:
+                    self.out(f"  [{st.menu}] {st.name}: {' / '.join(st.options) or '–'}")
+            else:
+                self.out("Rakstāmi parametri nav definēti ('rakstams': true moduli_lietotajs.json).")
             return
         c = self.menu("Iestatījumi", [f"{p.name} = {p.decode(kwp.read_local_id(p.lid))}" for p in writable])
         if c == 0:

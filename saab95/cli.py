@@ -254,6 +254,30 @@ def cmd_modules(args, tr):
         print(f"{m.key:<6} {addr}  {m.bus:<18} {m.name:<42} {m.status}")
 
 
+def format_settings(m) -> list[str]:
+    lines = [f"{m.key} – {m.name}  ({len(m.tech2_settings)} uzstādījumi; avots: Saab WIS, 9-5 MY2007)"]
+    for st in m.tech2_settings:
+        lid = f"0x{st.lid:02X}" if st.lid is not None else "nav zināms"
+        lines.append(f"  [{st.menu}] {st.name}")
+        if st.options:
+            lines.append(f"      vērtības: {' / '.join(st.options)}")
+        if st.description:
+            lines.append(f"      {st.description}")
+        lines.append(f"      identifikators: {lid}")
+    return lines
+
+
+def cmd_settings(args, tr):
+    mods = modules.load()
+    keys = [args.key.upper()] if args.key else [k for k, m in mods.items() if m.tech2_settings]
+    for k in keys:
+        if k not in mods:
+            sys.exit(f"Nezināms modulis '{k}'. Pieejami: {', '.join(mods)}")
+        print("\n".join(format_settings(mods[k])))
+        print()
+    print("Mainīt varēs tikai tos, kam identifikators ir atrasts uz auto (mod <MODULIS> scan).")
+
+
 def cmd_module_set(args, tr):
     patch = {"merkis": args.target, "statuss": "iestatīts manuāli"}
     for k in ("init_tx", "init_rx", "req", "resp", "ack"):
@@ -365,6 +389,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("adapter-test", help="pārbaudīt adapteri un savienojumu").set_defaults(fn=cmd_adapter_test)
     sub.add_parser("tech2", help="interaktīva Tech2 stila izvēlne").set_defaults(fn=cmd_tech2)
     sub.add_parser("modules", help="moduļu saraksts").set_defaults(fn=cmd_modules)
+    s = sub.add_parser("settings", help="Tech2 maināmo uzstādījumu katalogs no Saab WIS (bez adaptera)")
+    s.add_argument("key", nargs="?", help="SID, TWICE, DICE, ACC (noklusējums: visi)")
+    s.set_defaults(fn=cmd_settings)
 
     s = sub.add_parser("mod", help="darbības ar moduli: dtc, clear, data, read, write, scan, actuate")
     s.add_argument("key", help="ECM, TCM, ABS, SRS, MIU, SID, ACC, DICE, TWICE")
@@ -449,7 +476,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
-    if args.cmd in ("modules", "module-set", "analyze", "lpg-compare"):
+    if args.cmd in ("modules", "module-set", "analyze", "lpg-compare", "settings"):
         args.fn(args, None)
         return 0
     tr = open_transport(args)

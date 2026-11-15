@@ -71,6 +71,17 @@ class Actuator:
 
 
 @dataclass
+class Tech2Setting:
+    """Tech2 uzstādījums no Saab WIS. lid ir None, kamēr identifikators nav atrasts uz auto."""
+
+    menu: str
+    name: str
+    options: list[str]
+    description: str = ""
+    lid: int | None = None
+
+
+@dataclass
 class Module:
     key: str
     name: str
@@ -80,6 +91,8 @@ class Module:
     params: dict[int, Param] = field(default_factory=dict)
     actuators: list[Actuator] = field(default_factory=list)
     id_options: list[int] = field(default_factory=list)
+    tech2_settings: list[Tech2Setting] = field(default_factory=list)
+    wis: str = ""
 
     @property
     def known(self) -> bool:
@@ -152,6 +165,11 @@ def load(user_file: Path = USER_FILE) -> dict[str, Module]:
             params=params,
             actuators=acts,
             id_options=[_int(x) for x in m.get("identifikacija", [])],
+            tech2_settings=[
+                Tech2Setting(x["izvelne"], x["nosaukums"], x.get("varianti", []), x.get("apraksts", ""), _int(x.get("lid")))
+                for x in m.get("tech2_iestatijumi", [])
+            ],
+            wis=m.get("wis", ""),
         )
     return mods
 

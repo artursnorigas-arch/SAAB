@@ -4,19 +4,461 @@
     "nosaukums": "Dzinēja vadība (Trionic 7, B235R 2.3t Aero)",
     "kopne": "P-Bus 500 kbit/s",
     "merkis": "0x11",
-    "init_tx": "0x220", "init_rx": "0x238", "req": "0x240", "resp": "0x258", "ack": "0x266",
+    "init_tx": "0x220",
+    "init_rx": "0x238",
+    "req": "0x240",
+    "resp": "0x258",
+    "ack": "0x266",
     "statuss": "protokols zināms (TrionicCANFlasher)",
     "parametri": {
-      "0x90": {"nosaukums": "VIN", "tips": "ascii"}
+      "0x90": {
+        "nosaukums": "VIN",
+        "tips": "ascii"
+      }
     },
     "aktivizacijas": []
   },
-  "TCM": {"nosaukums": "Automātiskā ātrumkārba", "kopne": "P-Bus 500 kbit/s", "merkis": null, "statuss": "jāatrod"},
-  "ABS": {"nosaukums": "ABS / TCS / ESP", "kopne": "P-Bus 500 kbit/s", "merkis": null, "statuss": "jāatrod"},
-  "SRS": {"nosaukums": "Drošības spilveni (SRS)", "kopne": "I-Bus 47,6 kbit/s", "merkis": null, "statuss": "jāatrod"},
-  "MIU": {"nosaukums": "Mērinstrumentu panelis (MIU)", "kopne": "I-Bus 47,6 kbit/s", "merkis": null, "statuss": "jāatrod"},
-  "SID": {"nosaukums": "Saab informācijas displejs (SID)", "kopne": "I-Bus 47,6 kbit/s", "merkis": null, "statuss": "jāatrod"},
-  "ACC": {"nosaukums": "Klimata kontrole (ACC)", "kopne": "I-Bus 47,6 kbit/s", "merkis": null, "statuss": "jāatrod"},
-  "DICE": {"nosaukums": "Paneļa centrālā elektronika (DICE)", "kopne": "I-Bus 47,6 kbit/s", "merkis": null, "statuss": "jāatrod"},
-  "TWICE": {"nosaukums": "Signalizācija / centrālā atslēga (TWICE)", "kopne": "I-Bus 47,6 kbit/s", "merkis": null, "statuss": "jāatrod"}
+  "TCM": {
+    "nosaukums": "Automātiskā ātrumkārba",
+    "kopne": "P-Bus 500 kbit/s",
+    "merkis": null,
+    "statuss": "jāatrod"
+  },
+  "ABS": {
+    "nosaukums": "ABS / TCS / ESP",
+    "kopne": "P-Bus 500 kbit/s",
+    "merkis": null,
+    "statuss": "jāatrod"
+  },
+  "SRS": {
+    "nosaukums": "Drošības spilveni (SRS)",
+    "kopne": "I-Bus 47,6 kbit/s",
+    "merkis": null,
+    "statuss": "jāatrod"
+  },
+  "MIU": {
+    "nosaukums": "Mērinstrumentu panelis (MIU)",
+    "kopne": "I-Bus 47,6 kbit/s",
+    "merkis": null,
+    "statuss": "jāatrod"
+  },
+  "SID": {
+    "nosaukums": "Saab informācijas displejs (SID)",
+    "kopne": "I-Bus 47,6 kbit/s",
+    "merkis": null,
+    "statuss": "jāatrod",
+    "wis": "https://saabwisonline.com/9-5-9600/2007/3-electrical-system/saab-information-display-sid/fault-diagnosis-general",
+    "tech2_iestatijumi": [
+      {
+        "izvelne": "Programming",
+        "nosaukums": "Speed Warning ME",
+        "varianti": [
+          "Off",
+          "On"
+        ],
+        "apraksts": "Signāls virs 120 km/h; Tuvo Austrumu tirgus prasība.",
+        "lid": null
+      },
+      {
+        "izvelne": "Programming",
+        "nosaukums": "Service Indicator Message",
+        "varianti": [
+          "Service Program 1",
+          "Service Program 2",
+          "Service Program 3, 5",
+          "Service Program 4 (US/CA)",
+          "Service Program 6:1",
+          "Service Program 6:2",
+          "Service Program 7"
+        ],
+        "apraksts": "Pēc kuras servisa programmas parādās 'Time for service'.",
+        "lid": null
+      },
+      {
+        "izvelne": "Programming",
+        "nosaukums": "Parking Heater Activation",
+        "varianti": [
+          "Disabled",
+          "Activation By Timer",
+          "Activation By Outside Temperature",
+          "Activation By Timer And Outside Temp"
+        ],
+        "apraksts": "Tikai ar uzstādītu stāvapsildi.",
+        "lid": null
+      },
+      {
+        "izvelne": "Programming",
+        "nosaukums": "Parking Heater Type",
+        "varianti": [
+          "Electrical Powered",
+          "Fuel Powered"
+        ],
+        "apraksts": "Tikai ar uzstādītu stāvapsildi.",
+        "lid": null
+      },
+      {
+        "izvelne": "Programming",
+        "nosaukums": "Extended Belt Reminder",
+        "varianti": [
+          "Yes",
+          "No"
+        ],
+        "apraksts": "Jostu atgādinājums, kas pastiprinās ar ātrumu. Eiropā noklusējums Yes. Ja No, tas pats jāiestata TWICE.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Recall Service Message",
+        "varianti": [],
+        "apraksts": "Dzēš 'Time for service'. Bez rīka: turēt CLEAR 8 sekundes.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Outdoor Temperature",
+        "varianti": [
+          "-5 °C … +5 °C"
+        ],
+        "apraksts": "Āra temperatūras rādījuma korekcija.",
+        "lid": null
+      }
+    ]
+  },
+  "ACC": {
+    "nosaukums": "Klimata kontrole (ACC)",
+    "kopne": "I-Bus 47,6 kbit/s",
+    "merkis": null,
+    "statuss": "jāatrod",
+    "wis": "https://saabwisonline.com/9-5-9600/2007/8-body/automatic-climate-control-acc/fault-diagnosis-general",
+    "tech2_iestatijumi": [
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Heated seat offset temperature",
+        "varianti": [],
+        "apraksts": "Sēdekļu apsildes temperatūras nobīde; vērtības WIS nav norādītas.",
+        "lid": null
+      },
+      {
+        "izvelne": "Panelis (bez rīka)",
+        "nosaukums": "Auto/Manual rear window defrost",
+        "varianti": [
+          "Auto",
+          "Manual"
+        ],
+        "apraksts": "Turēt aizmugurējā stikla apsildes pogu ilgāk par 2 s.",
+        "lid": null
+      },
+      {
+        "izvelne": "Panelis (bez rīka)",
+        "nosaukums": "Auto/Manual seat heating",
+        "varianti": [
+          "Auto",
+          "Manual"
+        ],
+        "apraksts": "Turēt sēdekļa apsildes pogu ilgāk par 2 s.",
+        "lid": null
+      }
+    ]
+  },
+  "DICE": {
+    "nosaukums": "Paneļa centrālā elektronika (DICE)",
+    "kopne": "I-Bus 47,6 kbit/s",
+    "merkis": null,
+    "statuss": "jāatrod",
+    "wis": "https://saabwisonline.com/9-5-9600/2007/3-electrical-system/dice/fault-diagnosis-general",
+    "tech2_iestatijumi": [
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Audible Key Warning",
+        "varianti": [
+          "Yes",
+          "No"
+        ],
+        "apraksts": "Brīdinājums par atslēgu aizdedzē, kad atver durvis.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Daylight Driving Lights",
+        "varianti": [
+          "Alternative 1",
+          "Alternative 2",
+          "Alternative 3"
+        ],
+        "apraksts": "1: slēdža 1./2. pozīcijā gaismu nav (visi tirgi, izņemot SE un CA). 2: tuvās gaismas 1. pozīcijā (SE). 3: tuvās gaismas visās pozīcijās (CA).",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Fog Light Variant",
+        "varianti": [
+          "Alternative 1",
+          "Alternative 2",
+          "Alternative 3"
+        ],
+        "apraksts": "1: neatkarīgi no tuvajām gaismām. 2: nevar ieslēgt kopā ar tuvajām (US/CA). 3: kopā ar tālajām gaismām.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Fan Variant",
+        "varianti": [
+          "Single Fan",
+          "Dual Fans"
+        ],
+        "apraksts": "Komplektācija, nav jāmaina.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "A/C System Configuration",
+        "varianti": [
+          "Yes",
+          "No"
+        ],
+        "apraksts": "Komplektācija, nav jāmaina.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Front Wiper Extra Wipe",
+        "varianti": [
+          "Yes",
+          "No"
+        ],
+        "apraksts": "Papildu vēziens 10 s pēc stikla mazgāšanas.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Lights On Warning",
+        "varianti": [
+          "Yes",
+          "No"
+        ],
+        "apraksts": "Brīdinājums par ieslēgtām gaismām, izņemot atslēgu.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Follow Me Home Light Active Time",
+        "varianti": [
+          "20 s",
+          "25 s",
+          "30 s",
+          "35 s",
+          "40 s",
+          "45 s",
+          "50 s"
+        ],
+        "apraksts": "Cik ilgi tuvās gaismas deg pēc izkāpšanas.",
+        "lid": null
+      }
+    ]
+  },
+  "TWICE": {
+    "nosaukums": "Signalizācija / centrālā atslēga (TWICE)",
+    "kopne": "I-Bus 47,6 kbit/s",
+    "merkis": null,
+    "statuss": "jāatrod",
+    "wis": "https://saabwisonline.com/9-5-9600/2007/3-electrical-system/twice/fault-diagnosis-general",
+    "tech2_iestatijumi": [
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Anti Theft Installation",
+        "varianti": [
+          "Without alarm",
+          "Alarm - glass break sensor",
+          "Alarm - glass break, tilt sensors"
+        ],
+        "apraksts": "Tikai mainot signalizācijas aparatūru.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Soundlevel at arm/disarm",
+        "varianti": [
+          "Low",
+          "High"
+        ],
+        "apraksts": "Neietekmē skaļumu trauksmes laikā.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Number of beeps at arming",
+        "varianti": [
+          "0–7"
+        ],
+        "apraksts": "ES un GB tirgū pēc likuma 0.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Number of beeps at disarming",
+        "varianti": [
+          "0–7"
+        ],
+        "apraksts": "ES un GB tirgū pēc likuma 0.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Number of beeps when opening trunk",
+        "varianti": [
+          "0–7"
+        ],
+        "apraksts": "ES un GB tirgū pēc likuma 0.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Disarming at low battery voltage",
+        "varianti": [
+          "No",
+          "Yes"
+        ],
+        "apraksts": "Ja Yes, signalizācija izslēdzas zem 7 V.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Sound Activation Time",
+        "varianti": [
+          "0–520 s"
+        ],
+        "apraksts": "Sirēnas darbības laiks trauksmē.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Flashers Activation Time",
+        "varianti": [
+          "0–520 s"
+        ],
+        "apraksts": "Pagriezienu rādītāju mirgošanas laiks trauksmē.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Self Arming",
+        "varianti": [
+          "No",
+          "Yes"
+        ],
+        "apraksts": "Automātiskā signalizācijas ieslēgšanās.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Selfarming Time",
+        "varianti": [
+          "0–2040 s"
+        ],
+        "apraksts": "Laiks līdz automātiskajai ieslēgšanai.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "TSL By 2 Times at Remote Control",
+        "varianti": [
+          "No",
+          "Yes"
+        ],
+        "apraksts": "Dubultā aizslēgšana: divi spiedieni 5 s laikā. ASV tirgū nedrīkst būt Yes.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Double Unlocking with Remote Control",
+        "varianti": [
+          "No",
+          "Yes"
+        ],
+        "apraksts": "",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "TSL Locking with key",
+        "varianti": [
+          "No",
+          "Yes"
+        ],
+        "apraksts": "Dubultā aizslēgšana: divi atslēgas pagriezieni 5 s laikā.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Sound Indication At TSL",
+        "varianti": [
+          "No",
+          "Yes"
+        ],
+        "apraksts": "",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Speed Dependant Locking Of Trunk",
+        "varianti": [
+          "No",
+          "Yes"
+        ],
+        "apraksts": "",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Lock Delay When Not Opening The Trunk",
+        "varianti": [
+          "No",
+          "Yes"
+        ],
+        "apraksts": "",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Lock Delay Time After Closing Trunk Lid",
+        "varianti": [
+          "No",
+          "Yes"
+        ],
+        "apraksts": "",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Belt Warning Sound",
+        "varianti": [
+          "On",
+          "Off"
+        ],
+        "apraksts": "Jāsaskaņo ar SID 'Extended Belt Reminder'.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Transport Mode",
+        "varianti": [
+          "On",
+          "Off"
+        ],
+        "apraksts": "Atslēdz centrālo atslēgu un signalizāciju, lai taupītu akumulatoru.",
+        "lid": null
+      },
+      {
+        "izvelne": "Adjustment",
+        "nosaukums": "Steering Wheel Position",
+        "varianti": [
+          "Left Hand Side",
+          "Right Hand Side"
+        ],
+        "apraksts": "Durvju piktogrammai mērinstrumentu panelī.",
+        "lid": null
+      }
+    ]
+  },
+  "_avots": "tech2_iestatijumi: Saab WIS, 9-5 (9600) MY2007, izvēlnes Adjustment/Programming. 'lid' = null, kamēr identifikators nav atrasts uz auto."
 }

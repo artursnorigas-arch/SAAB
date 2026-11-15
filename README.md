@@ -157,6 +157,17 @@ Izvēlne: **Vadības moduļi** → modulis → Kļūdu kodi / Dzēst / Datu sara
 | Atslēgu / imobilaizera programmēšana | – | apzināti nav iekļauts: vajadzīgs Saab drošības kods |
 | Moduļu pievienošana/noņemšana | – | atkarīgs no SPS |
 
+### Tech2 uzstādījumu katalogs
+
+```bash
+saab95 settings            # visi moduļi
+saab95 settings twice      # viens modulis
+```
+
+Rāda, kādus uzstādījumus Tech2 ļauj mainīt SID, TWICE, DICE un ACC moduļos (pēc Saab WIS, 9-5 MY2007). Adapteris nav vajadzīgs. Pilns saraksts: [docs/Tech2_uzstadijumi.md](docs/Tech2_uzstadijumi.md).
+
+Tas ir katalogs: mainīt šos uzstādījumus rīks varēs tikai pēc tam, kad uz auto būs atrasta moduļa adrese un uzstādījuma identifikators (`"lid"` laukā `tech2_iestatijumi`).
+
 ### Moduļu atrašana (vienreizējs darbs)
 
 Publiski ir zināma tikai Trionic 7 (ECM) adrese. Pārējo moduļu adreses rīks atrod pats:

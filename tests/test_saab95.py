@@ -273,3 +273,16 @@ def test_cli_wifi_adapter_test(capsys):
     assert cli.main(["--wifi", f"127.0.0.1:{emu.port}", "adapter-test"]) == 0
     out = capsys.readouterr().out
     assert "✓ VIN" in out and "Trionic 7:        ✓" in out
+
+
+def test_wis_settings_catalog(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    mods = modules.load()
+    counts = {k: len(mods[k].tech2_settings) for k in ("SID", "TWICE", "DICE", "ACC")}
+    assert counts == {"SID": 7, "TWICE": 20, "DICE": 8, "ACC": 3}
+    assert all(s.lid is None for m in mods.values() for s in m.tech2_settings)
+    assert cli.main(["settings", "dice"]) == 0
+    out = capsys.readouterr().out
+    assert "Follow Me Home Light Active Time" in out and "20 s / 25 s" in out
+    assert cli.main(["settings"]) == 0
+    assert "Self Arming" in capsys.readouterr().out
