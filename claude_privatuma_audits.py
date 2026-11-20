@@ -1,41 +1,46 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Claude privātuma audits (macOS)
-================================
-Pārbauda visus lokāli pieejamos Claude skill, aģentus, komandas, instrukcijas
-(CLAUDE.md), hooks, atļaujas un MCP savienojumus uz komandām un tekstiem, kas
-var apdraudēt privātumu: datu nosūtīšana ārpus datora, paroļu/atslēgu/pārlūka
-datu lasīšana, slēptas instrukcijas, aizmiglots kods, pastāvīga ievietošanās
-sistēmā, atļauju apiešana u.c.
+Claude privātuma audits v2 (macOS · Windows · Linux)
+====================================================
+Pārbauda visu, ko Claude lasa un izpilda šajā datorā: skill, aģentus, komandas,
+instrukcijas (CLAUDE.md / AGENTS.md), hooks, atļaujas, MCP savienojumus,
+Claude Desktop / Cowork / Claude Code CLI / VS Code / Cursor konfigurāciju un
+git repozitorijus (kurus lasa arī Claude Code tīmekļa sesijas). Meklē komandas
+un tekstus, kas var apdraudēt privātumu.
 
-Lietošana:
-    python3 claude_privatuma_audits.py                 # vienreizēja pārbaude
-    python3 claude_privatuma_audits.py --notify        # + macOS paziņojums
-    python3 claude_privatuma_audits.py --install-schedule [--time 09:07]
-    python3 claude_privatuma_audits.py --uninstall-schedule
-    python3 claude_privatuma_audits.py --path ~/Downloads/jauns.skill
-    python3 claude_privatuma_audits.py --json          # JSON izvade
-    python3 claude_privatuma_audits.py --min-severity MEDIUM
+Pārbaude:
+    python3 claude_privatuma_audits.py                  # pilna pārbaude
+    python3 claude_privatuma_audits.py --path X         # papildu fails/mape/.skill/.zip
+    python3 claude_privatuma_audits.py --repos ~/Dev    # papildu mape ar git repozitorijiem
+    python3 claude_privatuma_audits.py --git URL        # pārbauda attālu repozitoriju (shallow clone)
+    python3 claude_privatuma_audits.py --min-severity MEDIUM --json
 
-Atgriezes kods: 0 = tīrs/LOW, 1 = ir MEDIUM, 2 = ir HIGH/CRITICAL.
-Konfigurācija: ~/.claude-audit/config.json (tiek izveidota pirmajā palaišanā).
-Rindu var atzīmēt kā drošu, pievienojot tai komentāru: audit-ignore
+Kontrole un uzraudzība:
+    --install-schedule [--time 09:07]   ikdienas automātiska palaišana (launchd / schtasks / cron)
+    --uninstall-schedule
+    --status                            vai grafiks darbojas, vai skripts nav mainīts, cik sen pārbaudīts
+    --history                           pēdējo palaišanu vēsture
+    --accept ID|ALL / --unaccept ID     atzīt pārbaudītu atradumu par drošu
+    --checklist / --checklist-done      manuālā pārbaude tam, ko nevar redzēt lokāli (web, telefons, Connectors)
 
-Ierobežojums: skripts redz tikai to, kas ir glabāts šajā datorā. claude.ai
-tīmekļa savienojumi (Connectors) un organizācijas skill, kas nav sinhronizēti
-uz Mac, jāpārbauda claude.ai Settings; eksportētu skill (.zip/.skill) var
-pārbaudīt ar --path.
+Atgriezes kods: 0 = tīrs/LOW, 1 = ir MEDIUM, 2 = ir HIGH/CRITICAL, 3 = problēma ar kontroli (--status).
+Konfigurācija: ~/.claude-audit/config.json. Rindu var atzīmēt kā drošu ar komentāru: audit-ignore
+Pilna instrukcija: INSTRUKCIJA_Claude_privatuma_audits.md
 """
 import argparse
 import hashlib
 import json
 import os
+import platform
 import plistlib
 import re
 import shutil
+import socket
 import subprocess
 import sys
+import tempfile
+import time
 import zipfile
 from dataclasses import dataclass, asdict
 from datetime import datetime
@@ -43,12 +48,21 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 HOME = Path.home()
+SYS = platform.system()          # Darwin | Windows | Linux
+VERSION = "2.0"
 WORK = HOME / ".claude-audit"
 CONFIG = WORK / "config.json"
 STATE = WORK / "state.json"
 REPORTS = WORK / "reports"
+RUNS = WORK / "runs.jsonl"
+ACCEPTED = WORK / "accepted.json"
+CHECKLIST = WORK / "checklist.json"
+SCRIPT_HASH = WORK / "script.sha256"
+ALERT = WORK / "BRIDINAJUMS.txt"
 LABEL = "lv.lsb.claude-privatuma-audits"
 PLIST = HOME / "Library/LaunchAgents" / f"{LABEL}.plist"
+WIN_TASK = "ClaudePrivatumaAudits"
+CRON_MARK = "# claude-privatuma-audits"
 
 SEV_ORDER = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
 COLORS = {"CRITICAL": "\033[1;95m", "HIGH": "\033[1;91m", "MEDIUM": "\033[93m",
@@ -69,6 +83,9 @@ DEFAULT_CONFIG = {
     "ignore_rules": [],            # piem. ["OBF-02"]
     "ignore_paths": [],            # apakšvirknes, piem. ["/node_modules/"]
     "extra_paths": [],             # papildu mapes/faili, ko skenēt vienmēr
+    "repo_roots": [],              # mapes, kurās meklēt git repozitorijus
+    "stale_hours": 36,             # cik ilgi bez pārbaudes uzskatīt par kļūmi
+    "checklist_days": 30,          # cik bieži atkārtot manuālo pārbaudi
 }
 
 # ---------------------------------------------------------------- noteikumi
@@ -120,6 +137,16 @@ RULES = [
      r"((>>?|tee\s+-a)\s*~?/?[\w./-]*\.(zshrc|zshenv|zprofile|bashrc|bash_profile|profile)\b|sed\s+-i[^\n]*\.(zshrc|zshenv|zprofile|bashrc|bash_profile))"),
     ("PERS-03", "MEDIUM", "Claude iestatījumu/instrukciju modificēšana no skripta",
      r"((>>?|tee(\s+-a)?|sed\s+-i|mv|cp)\s+[^\n]*\.claude/(settings|CLAUDE|hooks|skills|agents)|(>>?|tee)\s*[^\n]*\.claude\.json)"),
+    ("WIN-01", "CRITICAL", "PowerShell: attālā koda izpilde / kodēta komanda",
+     r"((iwr|irm|Invoke-WebRequest|Invoke-RestMethod|DownloadString|DownloadFile)[^\n]*\|\s*(iex|Invoke-Expression)|powershell[^\n]*\s-(enc|encodedcommand|e)\s+[A-Za-z0-9+/=]{20,}|certutil[^\n]*-urlcache|bitsadmin[^\n]*/transfer)"),
+    ("WIN-02", "HIGH", "Windows: pastāvīga ievietošanās (schtasks/Run atslēga/Startup)",
+     r"(schtasks(\.exe)?\s+/create|reg(\.exe)?\s+add[^\n]*CurrentVersion[\\/]Run|CurrentVersion[\\/]Run\b|Start Menu[\\/]Programs[\\/]Startup|New-ScheduledTask|Register-ScheduledTask)"),
+    ("WIN-03", "HIGH", "Windows: akreditācijas dati / pārlūka dati / LSASS",
+     r"(\bcmdkey\b|\bvaultcmd\b|Credential Manager|mimikatz|\blsass\b|AppData[\\/](Local|Roaming)[\\/][^\n]*(Login Data|Cookies|Web Data)|\.ssh[\\/](id_|config)|\.aws[\\/]credentials|NTUSER\.DAT)"),
+    ("WIN-04", "MEDIUM", "PowerShell: datu nosūtīšana (Invoke-WebRequest/RestMethod POST)",
+     r"(Invoke-(WebRequest|RestMethod)|\b(iwr|irm)\b)[^\n]*(-Method\s+(Post|Put)|-Body|-InFile)"),
+    ("LNX-01", "HIGH", "Linux: slepenie glabātuvi un pārlūka dati",
+     r"(secret-tool\s+(lookup|search)|\.local/share/keyrings|gnome-keyring|kwallet|\.config/(google-chrome|chromium|BraveSoftware)/[^\s\"']*(Login Data|Cookies)|\.mozilla/firefox)"),
     ("SURV-01", "HIGH", "Ekrāna/tastatūras/mikrofona pārtveršana",
      r"(\bscreencapture\b|CGEventTap|\bpynput\b|keylog|AVCaptureDevice|avfoundation|x11grab|\bsox\b[^\n]*-d\b|CGWindowListCreateImage)"),
     ("SURV-02", "MEDIUM", "Starpliktuves (clipboard) piekļuve",
@@ -167,6 +194,7 @@ class Finding:
     line: int
     snippet: str
     new: bool = False
+    accepted: bool = False
 
     def fp(self):
         return hashlib.sha1(
@@ -205,22 +233,92 @@ def domain_ok(host, allowed):
     return any(host == d or host.endswith("." + d) for d in allowed)
 
 
-def default_targets():
-    L = HOME / "Library/Application Support"
+REPO_FILES = [".claude", "CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", ".mcp.json",
+              ".vscode/mcp.json", ".cursor", ".cursorrules", ".windsurfrules"]
+REPO_SKIP = {"node_modules", "Library", "AppData", ".Trash", "venv", ".venv", "site-packages"}
+
+
+def platform_dirs():
+    """Claude Desktop/Cowork, IDE un pārvaldītās konfigurācijas atkarībā no OS."""
+    h = HOME
+    claude, ide, managed = [], [], []
+    if SYS == "Darwin":
+        base = h / "Library/Application Support"
+        claude = [base / "Claude", base / "Claude-3p"]
+        ide = [base / "Code/User", base / "Cursor/User", base / "Windsurf/User"]
+        managed = [Path("/Library/Application Support/ClaudeCode")]
+    elif SYS == "Windows":
+        roam = Path(os.environ.get("APPDATA", h / "AppData/Roaming"))
+        loc = Path(os.environ.get("LOCALAPPDATA", h / "AppData/Local"))
+        pd = Path(os.environ.get("PROGRAMDATA", "C:/ProgramData"))
+        claude = [roam / "Claude", loc / "Claude"] + \
+            list((loc / "Packages").glob("Claude*/LocalCache/Roaming/Claude")) \
+            if (loc / "Packages").exists() else [roam / "Claude", loc / "Claude"]
+        ide = [roam / "Code/User", roam / "Cursor/User", roam / "Windsurf/User"]
+        managed = [pd / "ClaudeCode"]
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME", h / ".config"))
+        claude = [base / "Claude", base / "claude"]
+        ide = [base / "Code/User", base / "Cursor/User", base / "Windsurf/User"]
+        managed = [Path("/etc/claude-code")]
+    ide_files = [d / n for d in ide for n in ("mcp.json", "settings.json")]
+    return claude, ide_files, managed
+
+
+def find_repos(roots, depth=4):
+    repos = []
+    for r in roots:
+        r = Path(r).expanduser()
+        if not r.is_dir():
+            continue
+        base = len(r.parts)
+        for dp, dn, fn in os.walk(r):
+            if ".git" in dn or ".git" in fn:
+                repos.append(Path(dp))
+                dn[:] = []
+                continue
+            if len(Path(dp).parts) - base >= depth:
+                dn[:] = []
+                continue
+            dn[:] = [d for d in dn if d not in REPO_SKIP and not d.startswith(".")]
+    return repos
+
+
+def repo_targets(repo):
+    return [repo / f for f in REPO_FILES if (repo / f).exists()]
+
+
+def git_toplevel(p):
+    for q in [p] + list(p.parents):
+        if (q / ".git").exists():
+            return q
+    return None
+
+
+def default_targets(cfg, extra_repo_roots=()):
+    claude, ide_files, managed = platform_dirs()
+    sub = ["local-agent-mode-sessions", "Claude Extensions", "claude-code",
+           "skills", "plugins", "claude_desktop_config.json"]
     cands = [
-        HOME / ".claude/skills", HOME / ".claude/commands",
-        HOME / ".claude/agents", HOME / ".claude/hooks",
-        HOME / ".claude/plugins", HOME / ".claude/CLAUDE.md",
+        HOME / ".claude/skills", HOME / ".claude/commands", HOME / ".claude/agents",
+        HOME / ".claude/hooks", HOME / ".claude/plugins", HOME / ".claude/CLAUDE.md",
         HOME / ".claude/settings.json", HOME / ".claude/settings.local.json",
         HOME / ".claude.json", HOME / ".config/claude",
-        L / "Claude/claude_desktop_config.json",
-        L / "Claude/local-agent-mode-sessions",
-        L / "Claude/Claude Extensions", L / "Claude/claude-code",
-        L / "Claude/skills", L / "Claude/plugins",
-        HOME / "Library/Application Support/Claude-3p",
-        Path.cwd() / ".claude", Path.cwd() / "CLAUDE.md", Path.cwd() / ".mcp.json",
+        HOME / ".cursor/mcp.json", HOME / ".cursor/rules",
+        HOME / ".codeium/windsurf/mcp_config.json",
+        *[d / x for d in claude for x in sub], *ide_files, *managed,
     ]
-    return [c for c in cands if c.exists()]
+    targets = [c for c in cands if c.exists()]
+    here = git_toplevel(Path.cwd()) or Path.cwd()
+    targets += [t for t in repo_targets(here)]
+    roots = [HOME / x for x in ("Documents/GitHub", "GitHub", "Developer", "Projects",
+                                "projects", "code", "src", "dev", "repos", "Documents/Projects")]
+    roots += [Path(x).expanduser() for x in cfg.get("repo_roots", [])] + \
+             [Path(x).expanduser() for x in extra_repo_roots]
+    repos = find_repos([r for r in roots if r.is_dir()])
+    for r in repos:
+        targets += repo_targets(r)
+    return targets, len(repos)
 
 
 def walk(targets, cfg):
@@ -242,7 +340,7 @@ def walk(targets, cfg):
             if rp in seen:
                 continue
             seen.add(rp)
-            if any(x in rp for x in cfg["ignore_paths"]):
+            if any(x in rp.replace("\\", "/") for x in cfg["ignore_paths"]):
                 continue
             ext = f.suffix.lower()
             if ext in SKIP_FILE_EXT:
@@ -472,98 +570,292 @@ def audit(targets, cfg):
                     check_json_structure(p, json.loads(text), cfg, findings)
                 except Exception:
                     pass
-    findings = [x for x in findings if not any(s in x.path for s in cfg["ignore_paths"])]
+    findings = [x for x in findings if not any(s in x.path.replace("\\", "/") for s in cfg["ignore_paths"])]
     return findings, hashes, len(files)
 
 
 # ---------------------------------------------------------------- izvade
-def render_text(findings, stats, min_sev, color):
-    shown = [f for f in findings if SEV_ORDER[f.severity] >= SEV_ORDER[min_sev]]
+def active(findings):
+    return [f for f in findings if not f.accepted]
+
+
+def render_text(findings, stats, min_sev, color, show_accepted=False):
+    act = active(findings)
+    pool = findings if show_accepted else act
+    shown = [f for f in pool if SEV_ORDER[f.severity] >= SEV_ORDER[min_sev]]
     shown.sort(key=lambda f: (-SEV_ORDER[f.severity], f.path, f.line))
-    lines = []
-    cnt = {s: sum(1 for f in findings if f.severity == s) for s in SEV_ORDER}
-    lines.append(f"Claude privātuma audits · {stats['time']}")
-    lines.append(f"Skenēti faili: {stats['files']} · CRITICAL {cnt['CRITICAL']} · "
-                 f"HIGH {cnt['HIGH']} · MEDIUM {cnt['MEDIUM']} · LOW {cnt['LOW']} · "
-                 f"jauni kopš pēdējās reizes: {sum(1 for f in findings if f.new)}")
-    if stats.get("changed"):
-        lines.append(f"Mainīti/jauni faili kopš pēdējās pārbaudes: {stats['changed']}, "
-                     f"dzēsti: {stats['removed']}")
-    lines.append("")
+    cnt = {k: sum(1 for f in act if f.severity == k) for k in SEV_ORDER}
+    L = [f"Claude privātuma audits v{VERSION} · {stats['time']} · {socket.gethostname()} ({SYS})",
+         f"Skenēti faili: {stats['files']} · repozitoriji: {stats.get('repos', 0)} · "
+         f"CRITICAL {cnt['CRITICAL']} · HIGH {cnt['HIGH']} · MEDIUM {cnt['MEDIUM']} · LOW {cnt['LOW']} · "
+         f"jauni: {sum(1 for f in act if f.new)} · apstiprināti: {len(findings) - len(act)}"]
+    if stats.get("changed") or stats.get("removed"):
+        L.append(f"Mainīti/jauni faili kopš pēdējās pārbaudes: {stats['changed']}, dzēsti: {stats['removed']}")
+    for w in stats.get("warnings", []):
+        L.append(("\033[1;91m" if color else "") + "⚠ " + w + (RESET if color else ""))
+    L.append("")
     cur = None
     for f in shown:
         if f.severity != cur:
             cur = f.severity
-            lines.append((COLORS[cur] if color else "") + f"== {cur} ==" + (RESET if color else ""))
-        loc = f"{f.path}:{f.line}" if f.line else f.path
-        mark = " [JAUNS]" if f.new else ""
-        lines.append(f"[{f.rule}]{mark} {f.title}")
-        lines.append(f"    {loc.replace(str(HOME), '~')}")
-        lines.append(f"    » {f.snippet}")
+            L.append((COLORS[cur] if color else "") + f"== {cur} ==" + (RESET if color else ""))
+        loc = (f"{f.path}:{f.line}" if f.line else f.path).replace(str(HOME), "~")
+        flags = (" [JAUNS]" if f.new else "") + (" [apstiprināts]" if f.accepted else "")
+        L += [f"[{f.rule}] #{f.fp()}{flags} {f.title}", f"    {loc}", f"    » {f.snippet}"]
     if not shown:
-        lines.append("Atradumu nav šajā smaguma līmenī. ✔")
-    return "\n".join(lines)
+        L.append("Atradumu nav šajā smaguma līmenī. ✔")
+    else:
+        L.append("\nPēc pārbaudes atzīt par drošu: --accept ID (vai --accept ALL)")
+    return "\n".join(L)
 
 
 def render_md(findings, stats):
     out = [f"# Claude privātuma audits — {stats['time']}", "",
-           f"Skenēti faili: **{stats['files']}**", ""]
+           f"Ierīce: **{socket.gethostname()}** ({SYS}) · skenēti faili: **{stats['files']}**", ""]
+    for w in stats.get("warnings", []):
+        out.append(f"> ⚠ {w}")
     for sev in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
         items = sorted((f for f in findings if f.severity == sev),
                        key=lambda f: (f.path, f.line))
-        out.append(f"## {sev} ({len(items)})")
+        out.append(f"## {sev} ({sum(1 for f in items if not f.accepted)} aktīvi)")
         for f in items:
             loc = (f"{f.path}:{f.line}" if f.line else f.path).replace(str(HOME), "~")
-            out.append(f"- **[{f.rule}]**{' 🆕' if f.new else ''} {f.title}  \n  `{loc}`  \n  `{f.snippet.replace('`', chr(39))}`")
+            tag = (" 🆕" if f.new else "") + (" ✅ apstiprināts" if f.accepted else "")
+            out.append(f"- **[{f.rule}]** `#{f.fp()}`{tag} {f.title}  \n  `{loc}`  \n  `{f.snippet.replace(chr(96), chr(39))}`")
         out.append("")
     return "\n".join(out)
 
 
+# ------------------------------------------------------- paziņojumi (visas OS)
 def notify(title, msg):
-    if sys.platform != "darwin":
-        return
-    esc = lambda s: s.replace("\\", "\\\\").replace('"', '\\"')
     try:
-        subprocess.run(["osascript", "-e",
-                        f'display notification "{esc(msg)}" with title "{esc(title)}" sound name "Basso"'],
-                       check=False, timeout=10)
+        with open(ALERT, "a", encoding="utf-8") as fh:
+            fh.write(f"{datetime.now():%Y-%m-%d %H:%M} | {title} | {msg}\n")
+    except OSError:
+        pass
+    try:
+        if SYS == "Darwin":
+            e = lambda x: x.replace("\\", "\\\\").replace('"', '\\"')
+            subprocess.run(["osascript", "-e",
+                            f'display notification "{e(msg)}" with title "{e(title)}" sound name "Basso"'],
+                           check=False, timeout=10)
+        elif SYS == "Windows":
+            q = lambda x: x.replace("'", "''")
+            ps = ("Add-Type -AssemblyName System.Windows.Forms,System.Drawing;"
+                  "$n=New-Object System.Windows.Forms.NotifyIcon;"
+                  "$n.Icon=[System.Drawing.SystemIcons]::Warning;$n.Visible=$true;"
+                  f"$n.ShowBalloonTip(15000,'{q(title)}','{q(msg)}',[System.Windows.Forms.ToolTipIcon]::Warning);"
+                  "Start-Sleep 16;$n.Dispose()")
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps], check=False, timeout=40)
+        elif shutil.which("notify-send"):
+            subprocess.run(["notify-send", "-u", "critical", title, msg], check=False, timeout=10)
     except Exception:
         pass
 
 
-# --------------------------------------------------------------- grafiks
+# ----------------------------------------------------------- grafiks (visas OS)
+def file_sha(p):
+    return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+
+
+def installed_script():
+    return WORK / "claude_privatuma_audits.py"
+
+
+def schedule_active():
+    try:
+        if SYS == "Darwin":
+            return subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{LABEL}"],
+                                  capture_output=True).returncode == 0
+        if SYS == "Windows":
+            return subprocess.run(["schtasks", "/Query", "/TN", WIN_TASK],
+                                  capture_output=True).returncode == 0
+        r = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+        return CRON_MARK in r.stdout
+    except Exception:
+        return False
+
+
 def install_schedule(hhmm):
     h, m = (int(x) for x in hhmm.split(":"))
     WORK.mkdir(parents=True, exist_ok=True)
-    dst = WORK / "claude_privatuma_audits.py"
+    dst = installed_script()
     if Path(__file__).resolve() != dst.resolve():
         shutil.copy2(__file__, dst)
-    plist = {
-        "Label": LABEL,
-        "ProgramArguments": [sys.executable, str(dst), "--quiet", "--notify"],
-        "StartCalendarInterval": {"Hour": h, "Minute": m},
-        "RunAtLoad": False,
-        "StandardOutPath": str(WORK / "launchd.out.log"),
-        "StandardErrorPath": str(WORK / "launchd.err.log"),
-    }
-    PLIST.parent.mkdir(parents=True, exist_ok=True)
-    with open(PLIST, "wb") as fh:
-        plistlib.dump(plist, fh)
-    uid = os.getuid()
-    subprocess.run(["launchctl", "bootout", f"gui/{uid}", str(PLIST)], capture_output=True)
-    r = subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(PLIST)],
-                       capture_output=True, text=True)
+    SCRIPT_HASH.write_text(file_sha(dst), encoding="utf-8")
+    cmd = [sys.executable, str(dst), "--quiet", "--notify"]
+    if SYS == "Darwin":
+        plist = {"Label": LABEL, "ProgramArguments": cmd,
+                 "StartCalendarInterval": {"Hour": h, "Minute": m}, "RunAtLoad": False,
+                 "StandardOutPath": str(WORK / "launchd.out.log"),
+                 "StandardErrorPath": str(WORK / "launchd.err.log")}
+        PLIST.parent.mkdir(parents=True, exist_ok=True)
+        with open(PLIST, "wb") as fh:
+            plistlib.dump(plist, fh)
+        uid = os.getuid()
+        subprocess.run(["launchctl", "bootout", f"gui/{uid}", str(PLIST)], capture_output=True)
+        r = subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(PLIST)],
+                           capture_output=True, text=True)
+    elif SYS == "Windows":
+        tr = " ".join(f'"{c}"' for c in cmd)
+        r = subprocess.run(["schtasks", "/Create", "/F", "/SC", "DAILY", "/TN", WIN_TASK,
+                            "/TR", tr, "/ST", f"{h:02d}:{m:02d}"], capture_output=True, text=True)
+    else:
+        cur = subprocess.run(["crontab", "-l"], capture_output=True, text=True).stdout
+        keep = [l for l in cur.splitlines() if CRON_MARK not in l]
+        keep.append(f'{m} {h} * * * "{sys.executable}" "{dst}" --quiet --notify {CRON_MARK}')
+        r = subprocess.run(["crontab", "-"], input="\n".join(keep) + "\n",
+                           capture_output=True, text=True)
     if r.returncode:
-        print("launchctl kļūda:", r.stderr.strip())
+        print("Grafika izveides kļūda:", (r.stderr or r.stdout).strip())
         return 1
-    print(f"Ieplānots katru dienu plkst. {hhmm}. Skripts: {dst}\nPārskati: {REPORTS}")
+    print(f"Ieplānots katru dienu plkst. {h:02d}:{m:02d} ({SYS}).\nSkripts: {dst}\n"
+          f"Pārskati: {REPORTS}\nPārbaude: python3 {dst} --status")
     return 0
 
 
 def uninstall_schedule():
-    subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}", str(PLIST)], capture_output=True)
-    PLIST.unlink(missing_ok=True)
+    if SYS == "Darwin":
+        subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}", str(PLIST)], capture_output=True)
+        PLIST.unlink(missing_ok=True)
+    elif SYS == "Windows":
+        subprocess.run(["schtasks", "/Delete", "/F", "/TN", WIN_TASK], capture_output=True)
+    else:
+        cur = subprocess.run(["crontab", "-l"], capture_output=True, text=True).stdout
+        keep = [l for l in cur.splitlines() if CRON_MARK not in l]
+        subprocess.run(["crontab", "-"], input="\n".join(keep) + "\n", text=True)
     print("Plānotais uzdevums noņemts.")
+    return 0
+
+
+# ------------------------------------------------------------------- kontrole
+def integrity_warning():
+    dst = installed_script()
+    if not (dst.exists() and SCRIPT_HASH.exists()):
+        return None
+    if Path(__file__).resolve() != dst.resolve():
+        return None
+    if file_sha(dst) != SCRIPT_HASH.read_text().strip():
+        return ("AUDITA SKRIPTS IR MAINĪTS kopš uzstādīšanas! Kāds (vai kāds Claude skill) to ir "
+                "pārrakstījis. Pārinstalē no uzticama avota: --install-schedule")
+    return None
+
+
+def last_run():
+    try:
+        lines = RUNS.read_text(encoding="utf-8").strip().splitlines()
+        return json.loads(lines[-1]) if lines else None
+    except Exception:
+        return None
+
+
+def log_run(entry):
+    with open(RUNS, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def checklist_age_days():
+    d = load_json(CHECKLIST, {}).get("done")
+    if not d:
+        return None
+    return (datetime.now() - datetime.fromisoformat(d)).days
+
+
+def cmd_status(cfg):
+    problems = 0
+    print(f"Claude privātuma audits v{VERSION} · {socket.gethostname()} ({SYS})")
+    sched = schedule_active()
+    print(f"[{'OK' if sched else '!!'}] Ikdienas grafiks: {'darbojas' if sched else 'NAV UZSTĀDĪTS (--install-schedule)'}")
+    problems += not sched
+    w = integrity_warning()
+    print(f"[{'OK' if not w else '!!'}] Skripta integritāte: {'nemainīts' if not w else w}")
+    problems += bool(w)
+    lr = last_run()
+    if lr:
+        age_h = (time.time() - lr["ts"]) / 3600
+        stale = age_h > cfg["stale_hours"]
+        print(f"[{'!!' if stale else 'OK'}] Pēdējā pārbaude: {lr['time']} (pirms {age_h:.0f} h)"
+              + ("  ← PĀRĀK SEN, grafiks nedarbojas" if stale else ""))
+        problems += stale
+        print(f"     Aktīvi atradumi: CRITICAL {lr['counts']['CRITICAL']} · HIGH {lr['counts']['HIGH']} · "
+              f"MEDIUM {lr['counts']['MEDIUM']} · LOW {lr['counts']['LOW']}")
+        problems += lr["counts"]["CRITICAL"] + lr["counts"]["HIGH"] > 0
+    else:
+        print("[!!] Pārbaude vēl nav veikta."); problems += 1
+    age = checklist_age_days()
+    old = age is None or age > cfg["checklist_days"]
+    print(f"[{'!!' if old else 'OK'}] Manuālā pārbaude (web/telefons/Connectors): "
+          + ("nav veikta" if age is None else f"pirms {age} d")
+          + ("  ← izpildi --checklist" if old else ""))
+    problems += old
+    print(f"     Apstiprināti atradumi: {len(load_json(ACCEPTED, {}))} · konfigurācija: {CONFIG}")
+    print(f"     Pārskati: {REPORTS}")
+    return 3 if problems else 0
+
+
+def cmd_history(n=15):
+    try:
+        rows = [json.loads(l) for l in RUNS.read_text(encoding="utf-8").splitlines()][-n:]
+    except Exception:
+        print("Vēstures vēl nav."); return 0
+    print(f"{'Laiks':17} {'Ierīce':16} {'Faili':>6} {'CRIT':>4} {'HIGH':>4} {'MED':>4} {'LOW':>4} {'Jauni':>5}  Skripta hash")
+    for r in rows:
+        c = r["counts"]
+        print(f"{r['time']:17} {r['host'][:16]:16} {r['files']:>6} {c['CRITICAL']:>4} {c['HIGH']:>4} "
+              f"{c['MEDIUM']:>4} {c['LOW']:>4} {r['new']:>5}  {r.get('script','')[:8]}")
+    return 0
+
+
+CHECKLIST_TEXT = """MANUĀLĀ PĀRBAUDE — vietas, kuras skripts nevar redzēt (ik mēnesi)
+=====================================================================
+1. claude.ai → Settings → Connectors / Integrations
+   [ ] Katrs savienojums (Microsoft 365, Gmail, GitHub, Slack…) ir vajadzīgs; neizmantotos atvieno
+   [ ] Pārbaudi piešķirtās tiesības (vai ir 'send mail', 'delete', 'write'? Vai pietiek ar lasīšanu?)
+   [ ] Nepazīstami/pašpievienoti custom connectors vai MCP URL — dzēst
+2. claude.ai → Settings → Capabilities / Skills
+   [ ] Katrs skill (arī organizācijas) ir pazīstams; lejupielādē un pārbaudi ar --path X.skill
+   [ ] Memory / Projects instrukcijas nesatur svešas komandas vai URL
+3. Trešo pušu konti, kuriem Claude dod piekļuvi
+   [ ] Microsoft: account.microsoft.com/privacy un myapps.microsoft.com → atļautās lietotnes
+   [ ] Google: myaccount.google.com/permissions → trešo pušu piekļuve
+   [ ] GitHub: github.com/settings/installations un /settings/applications → Claude lietotne,
+       tiesības tikai vajadzīgajiem repozitorijiem
+4. Claude Code tīmekļa/mākoņa sesijas (claude.ai/code)
+   [ ] Environments: tīkla režīms, atļautie hosti, vides mainīgie, setup skripts — bez noslēpumiem un liekām piekļuvēm
+   [ ] Repozitoriju .claude/settings.json hooks (skripts tos pārbauda, ja repo ir klonēts, vai: --git URL)
+5. Mobilās lietotnes (iPhone/iPad/Android)
+   [ ] Lokāli nav ko skenēt: tās izmanto to pašu kontu un savienojumus kā web (sk. 1.–2. punktu)
+   [ ] Atver kopīgotās saites un artefaktus: Settings → pārbaudi, kas ir publiski/kopīgots
+6. Citas ierīces
+   [ ] Skripts uzstādīts un darbojas katrā datorā (python3 ... --status katrā)
+Kad pabeigts: python3 claude_privatuma_audits.py --checklist-done
+"""
+
+
+def clone_repo(url):
+    d = tempfile.mkdtemp(prefix="claude_audit_")
+    r = subprocess.run(["git", "clone", "--depth", "1", "--no-recurse-submodules", url, d],
+                       capture_output=True, text=True)
+    if r.returncode:
+        print("git clone kļūda:", r.stderr.strip()); shutil.rmtree(d, ignore_errors=True)
+        return None
+    return d
+
+
+def cmd_accept(ids, findings, unaccept=False):
+    acc = load_json(ACCEPTED, {})
+    chosen = findings if "ALL" in ids else [f for f in findings if f.fp() in ids]
+    if not chosen and not unaccept:
+        print("Neviens atradums neatbilst norādītajiem ID."); return 1
+    for f in chosen:
+        acc[f.fp()] = {"rule": f.rule, "path": f.path, "snippet": f.snippet,
+                       "date": datetime.now().strftime("%Y-%m-%d")}
+    if unaccept:
+        for i in ids:
+            acc.pop(i, None)
+    ACCEPTED.write_text(json.dumps(acc, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(("Noņemti" if unaccept else "Apstiprināti") + f" {len(ids) if unaccept else len(chosen)} atradumi. "
+          "Ja faila saturs mainīsies, atradums parādīsies atkal.")
     return 0
 
 
@@ -571,72 +863,133 @@ def uninstall_schedule():
 def main():
     ap = argparse.ArgumentParser(description="Claude privātuma audits")
     ap.add_argument("--path", action="append", default=[], help="papildu fails/mape/.skill/.zip")
+    ap.add_argument("--repos", action="append", default=[], help="papildu mape ar git repozitorijiem")
+    ap.add_argument("--git", action="append", default=[], help="attāla repozitorija URL (shallow clone)")
     ap.add_argument("--no-default", action="store_true", help="neskenēt standarta vietas")
     ap.add_argument("--min-severity", default="LOW", choices=list(SEV_ORDER))
+    ap.add_argument("--show-accepted", action="store_true")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--notify", action="store_true")
-    ap.add_argument("--quiet", action="store_true", help="bez izvades termināļā")
-    ap.add_argument("--no-save", action="store_true", help="nesaglabāt stāvokli/pārskatu")
+    ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--no-save", action="store_true")
     ap.add_argument("--install-schedule", action="store_true")
     ap.add_argument("--uninstall-schedule", action="store_true")
     ap.add_argument("--time", default="09:07", help="ikdienas palaišanas laiks HH:MM")
+    ap.add_argument("--status", action="store_true")
+    ap.add_argument("--history", action="store_true")
+    ap.add_argument("--checklist", action="store_true")
+    ap.add_argument("--checklist-done", action="store_true")
+    ap.add_argument("--accept", nargs="+", metavar="ID")
+    ap.add_argument("--unaccept", nargs="+", metavar="ID")
+    ap.add_argument("--version", action="version", version=VERSION)
     a = ap.parse_args()
 
+    cfg = load_config()
     if a.install_schedule:
         return install_schedule(a.time)
     if a.uninstall_schedule:
         return uninstall_schedule()
+    if a.status:
+        return cmd_status(cfg)
+    if a.history:
+        return cmd_history()
+    if a.checklist:
+        print(CHECKLIST_TEXT); return 0
+    if a.checklist_done:
+        CHECKLIST.write_text(json.dumps({"done": datetime.now().isoformat()}))
+        print("Manuālā pārbaude atzīmēta kā veikta."); return 0
+    if a.unaccept:
+        return cmd_accept(a.unaccept, [], unaccept=True)
 
-    cfg = load_config()
-    targets = ([] if a.no_default else default_targets()) + \
-              [Path(p).expanduser() for p in a.path + cfg["extra_paths"]]
+    targets, nrepos = ([], 0) if a.no_default else default_targets(cfg, a.repos)
+    targets += [Path(p).expanduser() for p in a.path + cfg["extra_paths"]]
+    for r in find_repos([Path(x).expanduser() for x in a.repos]) if a.no_default else []:
+        targets += repo_targets(r); nrepos += 1
+    clones = {}
+    for url in a.git:
+        d = clone_repo(url)
+        if d:
+            clones[d] = url
+            targets.append(Path(d))
     if not targets:
-        print("Nav ko skenēt: nav atrasta neviena Claude mape. Izmanto --path.")
+        print("Nav ko skenēt: nav atrasta neviena Claude mape. Izmanto --path vai --repos.")
         return 0
 
-    findings, hashes, nfiles = audit(targets, cfg)
+    try:
+        findings, hashes, nfiles = audit(targets, cfg)
+    finally:
+        pass
+    for d, url in clones.items():
+        for f in findings:
+            f.path = f.path.replace(d, url)
+        hashes = {k.replace(d, url): v for k, v in hashes.items()}
+        shutil.rmtree(d, ignore_errors=True)
+
+    acc = load_json(ACCEPTED, {})
+    for f in findings:
+        f.accepted = f.fp() in acc
+    if a.accept:
+        return cmd_accept(a.accept, findings)
 
     prev = load_json(STATE, {})
     known = set(prev.get("findings", []))
     old_hash = prev.get("hashes", {})
     first_run = not prev
+    partial = bool(a.path or a.git or a.no_default)   # daļēja pārbaude nepārraksta pilno bāzlīniju
     for f in findings:
-        f.new = (not first_run) and f.fp() not in known
-    changed = [p for p, h in hashes.items() if old_hash.get(p) != h] if not first_run else []
-    removed = [p for p in old_hash if p not in hashes] if not first_run else []
+        f.new = (not first_run) and (not partial) and f.fp() not in known
+    changed = [p for p, h in hashes.items() if old_hash.get(p) != h] if not (first_run or partial) else []
+    removed = [p for p in old_hash if p not in hashes] if not (first_run or partial) else []
+    warnings = []
+    w = integrity_warning()
+    if w:
+        warnings.append(w)
+    lr = last_run()
+    if lr and (time.time() - lr["ts"]) / 3600 > cfg["stale_hours"] * 1.5 and a.quiet:
+        warnings.append(f"Iepriekšējā pārbaude bija {lr['time']} — grafiks laikam nedarbojās.")
+    age = checklist_age_days()
+    if age is None or age > cfg["checklist_days"]:
+        warnings.append("Manuālā pārbaude (web/telefons/Connectors) nav veikta — palaid --checklist.")
     stats = {"time": datetime.now().strftime("%Y-%m-%d %H:%M"), "files": nfiles,
-             "changed": len(changed), "removed": len(removed)}
+             "repos": nrepos, "changed": len(changed), "removed": len(removed), "warnings": warnings}
+
+    act = active(findings)
+    counts = {k: sum(1 for f in act if f.severity == k) for k in SEV_ORDER}
+    serious = [f for f in act if SEV_ORDER[f.severity] >= 3]
+    new_serious = [f for f in serious if f.new or first_run]
 
     if not a.no_save:
         REPORTS.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
         (REPORTS / f"{stamp}.md").write_text(render_md(findings, stats), encoding="utf-8")
         (REPORTS / "pedejais.json").write_text(
-            json.dumps({"stats": stats, "findings": [asdict(f) for f in findings]},
+            json.dumps({"stats": stats, "findings": [dict(asdict(f), id=f.fp()) for f in findings]},
                        ensure_ascii=False, indent=2), encoding="utf-8")
-        STATE.write_text(json.dumps({"findings": [f.fp() for f in findings],
-                                     "hashes": hashes}), encoding="utf-8")
+        if not partial:
+            tmp = STATE.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"findings": [f.fp() for f in findings],
+                                       "hashes": hashes}), encoding="utf-8")
+            os.replace(tmp, STATE)
+            log_run({"ts": time.time(), "time": stats["time"], "host": socket.gethostname(),
+                     "os": SYS, "files": nfiles, "counts": counts, "new": sum(f.new for f in act),
+                     "script": file_sha(__file__)[:16], "version": VERSION})
         for old in sorted(REPORTS.glob("20*.md"))[:-60]:
             old.unlink(missing_ok=True)
 
     if not a.quiet:
         if a.json:
-            print(json.dumps({"stats": stats, "findings": [asdict(f) for f in findings]},
+            print(json.dumps({"stats": stats, "findings": [dict(asdict(f), id=f.fp()) for f in findings]},
                              ensure_ascii=False, indent=2))
         else:
-            print(render_text(findings, stats, a.min_severity, sys.stdout.isatty()))
+            print(render_text(findings, stats, a.min_severity, sys.stdout.isatty(), a.show_accepted))
             if not a.no_save:
-                print(f"\nPilns pārskats: {REPORTS}/")
-
-    serious = [f for f in findings if SEV_ORDER[f.severity] >= 3]
-    new_serious = [f for f in serious if f.new or first_run]
-    if a.notify and new_serious:
-        top = new_serious[0]
+                print(f"\nPilns pārskats: {REPORTS}")
+    if a.notify and (new_serious or w):
         notify("Claude privātuma audits",
-               f"{len(new_serious)} nopietni atradumi (HIGH/CRITICAL). Pirmais: {top.title}")
+               (w or f"{len(new_serious)} nopietni atradumi (HIGH/CRITICAL). Pirmais: {new_serious[0].title}"))
     if serious:
         return 2
-    return 1 if any(f.severity == "MEDIUM" for f in findings) else 0
+    return 1 if counts["MEDIUM"] else 0
 
 
 if __name__ == "__main__":
