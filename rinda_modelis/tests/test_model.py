@@ -46,7 +46,7 @@ def test_fiziskie_ierobezojumi():
 def test_registrs_robezas():
     for p in REGISTRY:
         assert p.lo <= p.default <= p.hi, p.key
-        assert p.status in ("A", "B", "C")
+        assert p.status in ("V", "A", "B", "C")
         assert p.source and p.rationale
 
 

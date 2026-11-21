@@ -12,13 +12,14 @@ from __future__ import annotations
 import itertools
 import json
 import sys
+import urllib.parse
 import urllib.request
 
 SOURCES = [
     dict(id="eurostat_sha", avots="Eurostat", dati="Veselības izdevumi pa finansēšanas shēmām (SHA): valdība/obligātā HF1, "
          "brīvprātīgā HF2, mājsaimniecību tiešie maksājumi HF3; % no kopējiem izdevumiem; LV un ES",
          kods="hlth_sha11_hf", url="https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/hlth_sha11_hf"
-         "?format=JSON&lang=EN&geo=LV&geo=EU27_2020&unit=PC_CHE&icd10=TOT",
+         "?format=JSON&lang=EN&geo=LV&geo=EU27_2020&unit=PC_CHE&icha11_hf=TOT_HF&icha11_hf=HF1&icha11_hf=HF2&icha11_hf=HF3",
          piekluve="REST API (JSON-stat), bez atslēgas", modelim="oop_share0, vhi_share0", pieejams_no_zinasanam="jā (zināms publisks API)"),
     dict(id="eurostat_ārsti", avots="Eurostat", dati="Praktizējošie ārsti pa specialitātēm", kods="hlth_rs_prs2",
          url="https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/hlth_rs_prs2?format=JSON&geo=LV",
@@ -51,6 +52,21 @@ SOURCES = [
 ]
 
 
+PARBAUDE = {  # rezultāti, pārbaudot 2026-11-21 pēc tam, kad vides tīkla politikā tika atļauti hosti
+    "eurostat_sha": "PIEEJAMS un izmantots (REST API). Dimensija ir icha11_hf (nevis hf). Dati līdz 2024. g.",
+    "eurostat_ārsti": "PIEEJAMS un izmantots (hlth_rs_prs2: PRACT/PACT/LIC). Dati līdz 2024. g.",
+    "eurostat_unmet": "PIEEJAMS un izmantots (hlth_silc_08, reason=WLIST/TXP). Dati līdz 2024. g.",
+    "oecd": "SDMX API atbild (200); HTML publikācija atgriež 403. Netika izmantots – Eurostat dod to pašu SHA.",
+    "csp": "API sakne atbild (200); tabulu vaicājumi netika izmantoti – IKP/nodarbinātībai izmantots Eurostat. Atvērto datu CSV (VAI020) pieejams.",
+    "nvd_apjomi": "PIEEJAMS un izmantots: data.gov.lv → NVD «Ambulatoro apmeklējumu skaits pa aprūpes epizodes veidiem» (XLSX, ārstu līmeņa, 2019–2026). Vietne vmnvd.gov.lv atveras ar parasta pārlūka User-Agent.",
+    "nvd_rindas": "NAV pieejams atvērtajos datos: data.gov.lv meklēšana pēc «rinda/gaidīšanas/rindu» neatrod NVD rindu datu kopu. Rindu dati ir tikai rindapiearsta.lv (nav atļauts; rezervācijas portāls).",
+    "data_gov_lv": "PIEEJAMS un izmantots (CKAN API). NVD publicē 14 datu kopas, tai skaitā ambulatoro apjomu.",
+    "spkc": "Sakne atbild (200); datu tabulas netika izmantotas.",
+    "fm_budzets": "Sakne atbild (200). Budžeta skaitļi apstiprināti VM paziņojumā (lvportals.lv, 04.12.2025.).",
+    "vsaa": "NAV atļauts šajā vidē (host nav pievienots); slimības lapu dati netika pārbaudīti.",
+}
+
+
 def jsonstat_to_rows(js: dict) -> list[dict]:
     """JSON-stat 2.0 → saraksts ar vārdnīcām {dimensija: kods, 'value': skaitlis}."""
     ids, sizes = js["id"], js["size"]
@@ -74,7 +90,8 @@ def jsonstat_to_rows(js: dict) -> list[dict]:
 
 def _get(url: str, timeout: int = 20) -> tuple[int | None, bytes, str]:
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "rinda-modelis/0.1 (datu pieejamības pārbaude)"})
+        url = urllib.parse.quote(url, safe=":/?&=%,")
+        req = urllib.request.Request(url, headers={"User-Agent": "rinda-modelis/0.1 (data availability check)"})
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, r.read(), ""
     except Exception as e:  # noqa: BLE001
@@ -95,7 +112,7 @@ def eurostat_oop() -> list[dict]:
     if status != 200:
         raise RuntimeError(f"Eurostat nav sasniedzams: {err or status}")
     rows = jsonstat_to_rows(json.loads(body))
-    return [r for r in rows if r.get("hf") in ("HF1", "HF2", "HF3")]
+    return [r for r in rows if r.get("icha11_hf") in ("HF1", "HF2", "HF3")]
 
 
 if __name__ == "__main__":
@@ -103,7 +120,7 @@ if __name__ == "__main__":
     for r in check_all():
         print(f"  {r['id']:<16} HTTP={r['http']}  {r['kluda']}")
     try:
-        for r in sorted(eurostat_oop(), key=lambda x: (x["geo"], x["hf"], x["time"]))[-30:]:
+        for r in sorted(eurostat_oop(), key=lambda x: (x["geo"], x["icha11_hf"], x["time"]))[-30:]:
             print(r)
     except Exception as e:  # noqa: BLE001
         print("Eurostat HF datu nolasīšana neizdevās:", e, file=sys.stderr)

@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from datu_avoti import SOURCES
+from datu_avoti import PARBAUDE, SOURCES
 from model import calibrate, sensitivity, simulate, summary
 from params import PAR_BY_KEY, REGISTRY, STATUS_TEXT, Params, Policy
 from scenarios import SCENARIOS
@@ -99,7 +99,7 @@ with st.sidebar:
 
 st.title("Rinda budžetu neietaupa – modelis Latvijas apstākļiem")
 st.caption("LSB teorētiskā modeļa skaitliska realizācija. Ilustratīvs rīks politikas lēmumu salīdzināšanai, **nevis prognoze**: "
-           "lielākā daļa ievaddatu ir aptuveni vai pieņēmumi (skatīt cilni «Pieņēmumi» un «Datu avoti»).")
+           "svarīgākie bāzes lielumi ir pārbaudīti Eurostat un NVD datos, uzvedības parametri ir pieņēmumi (skatīt cilnes «Datu pārbaude» un «Pieņēmumi»).")
 
 df = _sim(P, POL, YEARS)
 base = _sim(P, Policy(), YEARS)
@@ -107,8 +107,8 @@ cal = calibrate(P)
 for w in cal["warn"]:
     st.warning(w)
 
-tab_res, tab_sc, tab_sens, tab_par, tab_data, tab_meth = st.tabs(
-    ["Rezultāti", "Scenāriju salīdzinājums", "Jutīgums", "Pieņēmumi", "Datu avoti", "Metodika"])
+tab_res, tab_sc, tab_sens, tab_par, tab_chk, tab_data, tab_meth = st.tabs(
+    ["Rezultāti", "Scenāriju salīdzinājums", "Jutīgums", "Pieņēmumi", "Datu pārbaude", "Datu avoti", "Metodika"])
 
 
 def _line(fig, row, col, x, y, name, color, dash=None, **kw):
@@ -287,27 +287,94 @@ with tab_par:
         columns=["Lielums", "Vērtība"]).round(3), hide_index=True)
 
 # ------------------------------------------------------------------ datu avoti
-with tab_data:
-    st.markdown("""
-**Datu pieejamības pārbaude.** Izstrādes sesijā visi zemāk minētie serveri (Eurostat, OECD, CSP, NVD, SPKC, data.gov.lv, lvportals, LSM)
-**nebija sasniedzami** – vides tīkla politika tos bloķēja. Tāpēc pārbaudīts ir tikai tas, ko izdevās atrast meklētājā
-(statuss **A** pie parametriem); pārējais ir balstīts uz zināmu avotu struktūru un **jāapstiprina lokāli**:
-palaidiet `python datu_avoti.py`.""")
-    st.dataframe(pd.DataFrame(SOURCES)[["avots", "dati", "kods", "piekluve", "modelim", "pieejams_no_zinasanam", "url"]]
-                 .rename(columns={"avots": "Avots", "dati": "Dati", "kods": "Kods/datne", "piekluve": "Piekļuve",
-                                  "modelim": "Kam modelī", "pieejams_no_zinasanam": "Pieejamība (pēc zināšanām, nepārbaudīta)"}),
-                 hide_index=True, width="stretch")
-    st.markdown("""
-**Kas Latvijā publiski NAV pieejams (jāpieprasa NVD/VM):** svērtais vidējais gaidīšanas laiks pa specialitātēm; tarifu un apjomu sadalījums
-pa epizodēm; maksas vizīšu skaits privātajās prakses; ārstu darba laika sadalījums starp valsti un privāto sektoru.
-Šīs ir tieši tās vietas, kur raksts atsaucas uz VM un NVD datiem.
+with tab_chk:
+    import json, os
+    path = os.path.join(os.path.dirname(__file__), "dati", "verificeti_dati.json")
+    if not os.path.exists(path):
+        st.warning("Nav datu faila. Palaidiet `python datu_atjauninat.py`.")
+    else:
+        V = json.load(open(path, encoding="utf-8"))
+        E, N = V["eurostat"], V.get("nvd_ambulatorie", {})
+        st.markdown(f"Dati nolasīti no primārajiem avotiem **{V['atjaunots']}** (Eurostat API un NVD atvērtie dati). "
+                    "Atjaunot: `python datu_atjauninat.py`. Statuss **V** pie parametriem nozīmē, ka vērtība ir apstiprināta šajos datos.")
+        hf = E["sha_hf_PC_CHE"]
+        yrs = sorted(hf["LV|HF3"])
+        st.subheader("1. Pacientu tiešie maksājumi (HF3), % no kopējiem veselības izdevumiem")
+        f = go.Figure()
+        f.add_trace(go.Scatter(x=yrs, y=[hf["LV|HF3"][y] for y in yrs], name="Latvija", line=dict(color=C_POL, width=3)))
+        f.add_trace(go.Scatter(x=yrs, y=[hf["EU27_2020|HF3"][y] for y in yrs], name="ES-27", line=dict(color=C_BASE, width=2, dash="dash")))
+        f.add_hline(y=P.oop_share0 * 100, line=dict(color=C_WARN, dash="dot"), annotation_text="modeļa bāze")
+        f.update_layout(height=300, margin=dict(t=20, b=20), yaxis_title="%")
+        st.plotly_chart(f, width="stretch")
+        st.caption("2021. g. kritums (27 %) skaidrojams ar COVID-19 publisko izdevumu kāpumu. Eurostat hlth_sha11_hf.")
 
-**Atrastie fakti (meklētājā, nav pārbaudīti primārajos dokumentos):**
-- Veselības nozares budžets 2026. gadam 1,97 mljrd. EUR; speciālistu konsultācijām un izmeklējumiem ambulatori 379,6 milj. EUR; stacionāram 684 milj. EUR (lvportals.lv, 04.12.2025.).
-- 2024. gadā NVD administrētais budžets > 1,7 mljrd. EUR (NVD).
-- 2024. g. nov.: rindu mazināšanai piešķirti 16 milj. EUR, NVD: rindas nemazinās; galvenais iemesls – speciālistu un naudas trūkums (LSM, 24.11.2024.).
-- Tiešo maksājumu daļa: 31,9 % (2020., Sabiedrības veselības pamatnostādnes) un ~27 % (2021., WHO/EK profils); ES vidēji ~15 %. Skaitļi atšķiras pēc definīcijas.
-- Rindu uzskaite: iestādes uzrāda rindu dienās, ja gaidīšana >5 darba dienas; dati mēneša pārskatos uz katra mēneša 1. datumu (NVD).
+        st.subheader("2. Ambulatorā aprūpe: kas maksā (Eurostat SHA, 2024, EUR uz iedzīvotāju)")
+        hc = E["sha_hc_hf_EUR_HAB"]
+        rows = []
+        for g, nm in (("LV", "Latvija"), ("EU27_2020", "ES-27")):
+            tot = hc[f"{g}|HC13_23|TOT_HF"]["2024"]
+            rows.append({"Valsts": nm, "Kopā, EUR/iedz.": round(tot), "Valsts (HF1)": f"{hc.get(f'{g}|HC13_23|HF1', {}).get('2024', 0) / tot:.0%}",
+                         "Brīvpr. apdr. (HF2)": f"{hc.get(f'{g}|HC13_23|HF2', {}).get('2024', 0) / tot:.0%}",
+                         "Pacienti paši (HF3)": f"{hc.get(f'{g}|HC13_23|HF3', {}).get('2024', 0) / tot:.0%}"})
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        pop = E["iedzivotaji"]["TOTAL"]["2025"] / 1e6
+        st.caption(f"Latvijā pacientu tiešie ambulatorie maksājumi ≈ {hc['LV|HC13_23|HF3']['2024'] * pop:.0f} milj. EUR "
+                   f"pret valsts {hc['LV|HC13_23|HF1']['2024'] * pop:.0f} milj. EUR. Šajā grupā ir arī zobārstniecība un ģimenes ārsti, tāpēc tā ir augšējā robeža specialistiem "
+                   f"(modelis: ≈ {cal['D0'] * P.p0 / 1e6:.0f} milj. EUR).")
+
+        st.subheader("3. Valsts apmaksātais specialistu apjoms ir nemainīgs (NVD atvērtie dati)")
+        if N:
+            nd = pd.DataFrame({y: v for y, v in N.items()}).T
+            nd = nd[["sava_epizodes", "sava_laboratorijas_epizodes", "sava_epizodes_bez_laboratorijas", "sava_apmeklejumi", "sava_arstu_skaits_unikali"]
+                    if "sava_laboratorijas_epizodes" in nd else ["sava_epizodes", "sava_apmeklejumi", "sava_arstu_skaits_unikali"]]
+            nd.columns = [{"sava_epizodes": "SAVA epizodes", "sava_laboratorijas_epizodes": "t.sk. laboratorija",
+                           "sava_epizodes_bez_laboratorijas": "bez laboratorijas", "sava_apmeklejumi": "SAVA apmeklējumi",
+                           "sava_arstu_skaits_unikali": "Ārsti ar SAVA darbu (galvu sk.)"}[c] for c in nd.columns]
+            st.dataframe(nd, width="stretch")
+            if "bez laboratorijas" in nd:
+                last = nd["bez laboratorijas"].iloc[-1]
+                st.caption(f"Vidējais tarifs = {P.E0:.1f} milj. EUR / {last / 1e6:.2f} milj. epizožu ≈ **{P.E0 * 1e6 / last:.0f} EUR** (modelī τ0 = {P.tau0:.0f}).")
+        ar = E["arsti_nr"]["PRACT"]
+        st.markdown(f"**Ārstu skaits:** praktizējošie {', '.join(f'{ar[y]:.0f} ({y})' for y in sorted(ar))} – nemainīgs ⇒ `g_H` ≈ 0.")
+
+        st.subheader("4. Neapmierinātās vajadzības (EU-SILC): gaidīšanas saraksts un cena, % iedzīvotāju 16+")
+        um = E["unmet_pc"]
+        yy = sorted(um["LV|TOTAL|WLIST"])
+        f3 = go.Figure()
+        for key, nm, col, dash in (("LV|TOTAL|WLIST", "LV: gaidīšanas saraksts", C_POL, None), ("LV|TOTAL|TXP", "LV: pārāk dārgi", "#e08a1e", None),
+                                   ("EU27_2020|TOTAL|WLIST", "ES: gaidīšanas saraksts", C_BASE, "dash")):
+            f3.add_trace(go.Scatter(x=yy, y=[um[key][y] for y in yy], name=nm, line=dict(color=col, dash=dash, width=2.5)))
+        f3.update_layout(height=300, margin=dict(t=20, b=20), yaxis_title="%")
+        st.plotly_chart(f3, width="stretch")
+        st.caption(f"Gaidīšanas dēļ neapmierinātā vajadzība Latvijā 2021→2024: {um['LV|TOTAL|WLIST']['2021']} % → {um['LV|TOTAL|WLIST']['2024']} % (ES {um['EU27_2020|TOTAL|WLIST']['2024']} %). "
+                   f"Zemākajā ienākumu kvintilī 2024. g. – {um['LV|QU1|WLIST']['2024']} % (rinda) un {um['LV|QU1|TXP']['2024']} % (cena), augstākajā {um['LV|QU5|WLIST']['2024']} % un {um['LV|QU5|TXP']['2024']} %. "
+                   "Tas ir netiešs apstiprinājums rindu pieaugumam, ko modelis atveido bāzes scenārijā, un parāda ienākumu nevienlīdzību, ko modelis neietver.")
+
+        st.subheader("5. Parametru salīdzinājums ar datiem")
+        ikp, emp = E["ikp_meur"]["LV"]["2024"], E["nodarbinati_tuks"]["LV"]["2024"]
+        ppl = E["iedzivotaji"]["TOTAL"]
+        sh = E["dala_65plus_pc"]["PC_Y65_MAX"] if "dala_65plus_pc" in E else {}
+        chk = [("oop_share0", f"{P.oop_share0:.1%}", f"vidēji 2019–2024: {sum(hf['LV|HF3'][y] for y in yrs if '2019' <= y <= '2024') / len([y for y in yrs if '2019' <= y <= '2024']):.1f} %"),
+               ("vhi_share0", f"{P.vhi_share0:.1%}", f"{hf['LV|HF2']['2024']:.1f} % (2024)"),
+               ("v_day", f"{P.v_day:.0f} EUR", f"{ikp * 1e6 / (emp * 1e3) / 250:.0f} EUR (IKP/nodarbinātie/250)"),
+               ("g_H", f"{P.g_H:.1%}", f"praktizējošie ārsti 2022→2024: {(ar['2024'] / ar['2022']) ** 0.5 - 1:+.1%}/g."),
+               ("g_d (iedzīvotāji)", f"{P.g_d:.1%}", f"iedzīvotāju skaits 2024→2025: {ppl['2025'] / ppl['2024'] - 1:+.1%}; 65+ daļa {sh.get('2015', '?')} → {sh.get('2025', '?')} %")]
+        st.dataframe(pd.DataFrame(chk, columns=["Parametrs", "Modeļa vērtība", "Datos"]), hide_index=True, width="stretch")
+
+with tab_data:
+    st.markdown("**Datu pieejamības pārbaude (2026-11-21).** Pēc tīkla atļaujām pārbaudīti avoti; statuss katram – zemāk. "
+                "Atkārtot: `python datu_avoti.py` (pieejamība) un `python datu_atjauninat.py` (datu nolasīšana).")
+    tb = pd.DataFrame(SOURCES)
+    tb["Pārbaudes rezultāts"] = tb["id"].map(PARBAUDE)
+    st.dataframe(tb[["avots", "dati", "kods", "modelim", "Pārbaudes rezultāts", "url"]].rename(columns={
+        "avots": "Avots", "dati": "Dati", "kods": "Kods/datne", "modelim": "Kam modelī"}), hide_index=True, width="stretch")
+    st.markdown("""
+**Latvijā publiski NAV pieejams (jāpieprasa NVD/VM):** svērtais vidējais gaidīšanas laiks pa specialitātēm (NVD atvērtajos datos rindu datu kopas nav);
+vidējais tarifs uz epizodi (aprēķināts netieši); maksas vizīšu skaits privātajās praksēs; ārstu darba laika sadalījums starp valsts un privāto sektoru.
+Šīs ir tās vietas, kur raksts atsaucas uz VM un NVD datiem.
+
+**VM budžets 2026 (paziņojums, LV portāls 04.12.2025.):** stacionārs 684; speciālistu konsultācijas un izmeklējumi ambulatori 379,6; kompensējamās zāles 352;
+primārā aprūpe 235,5; NMPD 122,3; laboratorijas izmeklējumi 62,5; medicīnas izglītība 69,6 milj. EUR; kopā 1,97 mljrd. EUR.
 """)
 
 # ------------------------------------------------------------------ metodika
