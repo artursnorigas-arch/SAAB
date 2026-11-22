@@ -1,0 +1,405 @@
+<title>Rindu un maksas aprūpes modelis</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Plāns: LSB politikas rīks. Kreisajā pusē svirras, labajā rezultāti ciļņu veidā.
+   Krāsas: auksti pelēkzila virsma, viens zils akcents izvēlētajam scenārijam, pelēks bāzei, sarkans tikai brīdinājumam. */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --surface-2:#eaeef4; --line:#d6dce6; --text:#17202e; --muted:#586376;
+  --accent:#1d5fd0; --accent-ink:#ffffff; --base:#7d8797; --warn:#c2412d; --good:#1d7a55; --amber:#b9770e; --violet:#7a4fb5;
+  --grid:#e3e8ef; --font:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1520; --surface:#18202e; --surface-2:#222c3d; --line:#33405a; --text:#e6ebf4; --muted:#9aa6bb;
+  --accent:#6aa0ff; --accent-ink:#0b1220; --base:#8b96aa; --warn:#ff8a75; --good:#5fd0a0; --amber:#e8b24c; --violet:#b79cf0; --grid:#2a3548; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1520; --surface:#18202e; --surface-2:#222c3d; --line:#33405a; --text:#e6ebf4; --muted:#9aa6bb;
+  --accent:#6aa0ff; --accent-ink:#0b1220; --base:#8b96aa; --warn:#ff8a75; --good:#5fd0a0; --amber:#e8b24c; --violet:#b79cf0; --grid:#2a3548; color-scheme:dark}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:15px;line-height:1.5}
+*{box-sizing:border-box}
+.wrap{max-width:1360px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+h1{font-size:clamp(1.4rem,2.6vw,1.9rem);line-height:1.2;margin:0 0 6px;font-weight:600;text-wrap:balance;letter-spacing:-.01em}
+h2{font-size:1.05rem;margin:0 0 10px;font-weight:600}
+h3{font-size:.8rem;margin:0 0 8px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+p{margin:0 0 10px}
+.lede{color:var(--muted);max-width:78ch;margin-bottom:6px}
+.notice{display:inline-block;font-size:.82rem;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:4px 10px;color:var(--muted);margin-top:6px}
+.layout{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:20px;margin-top:18px;align-items:start}
+@media (max-width:960px){.layout{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.controls{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+@media (max-width:960px){.controls{position:static;max-height:none}}
+.field{margin:0 0 14px}
+.field label,.field .lbl{display:flex;justify-content:space-between;gap:8px;font-size:.88rem;margin-bottom:4px}
+.field output{font-family:var(--mono);font-size:.85rem;color:var(--accent);white-space:nowrap}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+input[type=number],select{font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%}
+input[type=number]{font-family:var(--mono);font-size:.9rem}
+.check{display:flex;gap:8px;align-items:flex-start;font-size:.88rem;margin:0 0 12px}
+.check input{margin-top:3px;accent-color:var(--accent)}
+details{border-top:1px solid var(--line);padding-top:10px;margin-top:6px}
+summary{cursor:pointer;font-size:.88rem;font-weight:500}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.chip{font:inherit;font-size:.78rem;border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:999px;padding:5px 10px;cursor:pointer;text-align:left}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button:focus-visible,summary:focus-visible,input:focus-visible,select:focus-visible,.tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--line);margin-bottom:16px}
+.tab{font:inherit;font-size:.9rem;background:none;border:0;border-bottom:2px solid transparent;padding:9px 12px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent);font-weight:500}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.kpi .k{font-size:.78rem;color:var(--muted);line-height:1.3;min-height:2.1em}
+.kpi .v{font-family:var(--mono);font-size:1.55rem;font-weight:500;margin:2px 0}
+.kpi .d{font-size:.78rem;font-family:var(--mono)}
+.d.bad{color:var(--warn)} .d.ok{color:var(--good)} .d.na{color:var(--muted)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:14px}
+.chart{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.chart .cv{position:relative;height:250px}
+.chart.tall .cv{height:340px}
+.cap{font-size:.8rem;color:var(--muted);margin:8px 0 0}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;margin:12px 0}
+table{border-collapse:collapse;width:100%;font-size:.85rem}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left;white-space:normal;min-width:220px}
+th{font-size:.76rem;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600}
+tr:last-child td{border-bottom:0}
+tr.sel td{background:var(--surface-2)}
+.neg{color:var(--good)} .pos{color:var(--warn)}
+.warnbox{background:var(--surface);border:1px solid var(--warn);color:var(--warn);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:.88rem}
+.row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr);gap:16px;padding:14px 0;border-top:1px solid var(--line)}
+@media (max-width:760px){.row{grid-template-columns:minmax(0,1fr)}}
+.row .meta{font-size:.82rem;color:var(--muted)}
+.row .meta b{color:var(--text);font-weight:500}
+.badge{display:inline-block;font-family:var(--mono);font-size:.72rem;border-radius:4px;padding:1px 6px;margin-left:6px;border:1px solid var(--line);vertical-align:middle}
+.badge.V{background:var(--good);color:var(--accent-ink);border-color:var(--good)}
+.badge.A,.badge.B{border-color:var(--amber);color:var(--amber)}
+.badge.C{border-color:var(--base);color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.82rem;color:var(--muted);margin-bottom:10px}
+.tool{display:flex;flex-wrap:wrap;gap:14px;align-items:end;margin-bottom:12px}
+.tool .field{margin:0;min-width:180px;flex:1}
+.btn{font:inherit;font-size:.85rem;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:6px;padding:7px 12px;cursor:pointer}
+code{font-family:var(--mono);font-size:.84em;background:var(--surface-2);border-radius:4px;padding:1px 5px}
+.foot{margin-top:28px;font-size:.8rem;color:var(--muted)}
+.method li{margin-bottom:8px}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+<div class="wrap">
+  <h1>Rinda budžetu neietaupa: modelis Latvijas apstākļiem</h1>
+  <p class="lede">LSB raksta teorijas skaitliska realizācija ambulatorajai speciālistu aprūpei. Mainiet tarifu, apjomu un pieņēmumus, un redziet, kā mainās rinda, maksas cena, pacientu tiešie maksājumi un akūtā palīdzība.</p>
+  <span class="notice">Ilustratīvs rīks politikas lēmumu salīdzināšanai, nevis prognoze. Svarīgākie bāzes lielumi ir pārbaudīti Eurostat un NVD datos; uzvedības parametri ir pieņēmumi.</span>
+
+  <div class="layout">
+    <aside class="panel controls" aria-label="Politikas svirras">
+      <h3>Scenārijs</h3>
+      <div class="chips" id="chips"></div>
+      <h3>Politikas svirras</h3>
+      <div class="field"><label for="d_tarifs">Tarifa maiņa <output id="o_d_tarifs"></output></label><input type="range" id="d_tarifs" min="-40" max="100" step="1" value="0"></div>
+      <div class="field"><label for="d_apjoms">Apmaksātā apjoma (kvotas) maiņa <output id="o_d_apjoms"></output></label><input type="range" id="d_apjoms" min="-40" max="60" step="1" value="0"></div>
+      <div class="field"><label for="admin_red">Administratīvā sloga samazinājums <output id="o_admin_red"></output></label><input type="range" id="admin_red" min="0" max="15" step="1" value="0"></div>
+      <label class="check"><input type="checkbox" id="auto_fund"><span>Politikas izmaksas sedz ar papildu naudu. Ja nav atzīmēts, kopbudžets ir fiksēts: tarifa kāpums samazina apjomu, samazinājums paliek kā ietaupījums.</span></label>
+      <details><summary>Ieviešana un daudzgadu plāns</summary>
+        <div style="height:10px"></div>
+        <div class="field"><label for="ramp_years">Ieviešanas periods <output id="o_ramp_years"></output></label><input type="range" id="ramp_years" min="0" max="6" step="0.5" value="3"></div>
+        <div class="field"><label for="delay_years">Kavēšanās līdz sākumam <output id="o_delay_years"></output></label><input type="range" id="delay_years" min="0" max="5" step="0.5" value="0"></div>
+        <div class="field"><label for="tarifs_aug">Papildu tarifa izaugsme gadā <output id="o_tarifs_aug"></output></label><input type="range" id="tarifs_aug" min="0" max="5" step="0.5" value="0"></div>
+        <div class="field"><label for="apjoms_aug">Papildu apjoma izaugsme gadā <output id="o_apjoms_aug"></output></label><input type="range" id="apjoms_aug" min="0" max="5" step="0.5" value="0"></div>
+        <div class="field"><label for="fte_aug">Papildu ārstu izaugsme gadā (rezidentūra) <output id="o_fte_aug"></output></label><input type="range" id="fte_aug" min="0" max="5" step="0.5" value="0"></div>
+        <div class="field"><label for="fte_lag">Kavēšanās līdz jauno ārstu nonākšanai <output id="o_fte_lag"></output></label><input type="range" id="fte_lag" min="1" max="10" step="1" value="5"></div>
+      </details>
+      <details open><summary>Horizonts</summary>
+        <div style="height:10px"></div>
+        <div class="field"><label for="years">Modelēšanas horizonts <output id="o_years"></output></label><input type="range" id="years" min="3" max="20" step="1" value="10"></div>
+      </details>
+    </aside>
+
+    <main>
+      <div id="warns"></div>
+      <div class="tabs" role="tablist" id="tabs"></div>
+
+      <section id="t-rezultati" hidden>
+        <div class="kpis" id="kpis"></div>
+        <div class="legend"><span><b style="color:var(--accent)">━</b> izvēlētais scenārijs</span><span><b style="color:var(--base)">╍</b> bāze: finansējums nemainīgs</span></div>
+        <div class="grid2" id="charts-res"></div>
+        <h2 style="margin-top:22px">Uzkrātā ietekme pret bāzi, milj. EUR</h2>
+        <div class="kpis" id="kpis2"></div>
+        <div class="chart"><div class="cv"><canvas id="c-cum" role="img" aria-label="Uzkrātā ietekme pret bāzi"></canvas></div>
+          <p class="cap">Ieguldījums nāk pirms ieguvuma: valsts izdevumu līkne aug uzreiz, ieguvumi uzkrājas vēlāk. Akūtās palīdzības ietaupījums sedz tikai daļu papildu izdevumu (Russell, 2009).</p></div>
+      </section>
+
+      <section id="t-scenariji" hidden>
+        <p>Visi gatavie scenāriji ar jūsu pašreizējiem pieņēmumiem. Izmaiņas ir pret scenāriju «finansējums nemainīgs», uzkrātas horizonta laikā (milj. EUR).</p>
+        <div class="tool">
+          <div class="field"><label for="sc-metric">Rādītājs grafikā</label><select id="sc-metric"></select></div>
+        </div>
+        <div class="chart tall"><div class="cv"><canvas id="c-sc" role="img" aria-label="Scenāriju salīdzinājums"></canvas></div></div>
+        <div class="tablewrap"><table id="sc-table"></table></div>
+        <p class="cap">Kā lasīt. Ja «tikai tarifs» un «tikai apjoms» ir sliktāki par «kopā» gaidīšanas laikā, modelis apstiprina raksta tēzi. «Δ kopā» = valsts izdevumi + pacientu maksājumi + darba zaudējumi; negatīvs skaitlis nozīmē, ka scenārijs sabiedrībai izmaksā mazāk nekā bāze. Šī kolonna ir jutīga pret ārstu reakciju uz tarifu, privāto cenu un zaudēto darba dienu skaitu.</p>
+      </section>
+
+      <section id="t-jutiba" hidden>
+        <p>Katrs parametrs tiek mainīts par ± izvēlēto daļu, pārējiem paliekot nemainīgiem, un mēra izvēlētā scenārija galarezultātu. Garākās joslas ir parametri, kurus vērtīgāk precizēt ar datiem.</p>
+        <div class="tool">
+          <div class="field"><label for="sens-metric">Rādītājs</label><select id="sens-metric">
+            <option value="gaidisana_men">Gaidīšanas laiks beigās, mēneši</option><option value="maksas_cena">Maksas cena beigās, EUR</option>
+            <option value="oop_dala">Tiešo maksājumu daļa beigās</option><option value="akutie_novers_tuks">Akūtās hospitalizācijas beigās, tūkst.</option></select></div>
+          <div class="field"><label for="sens-swing">Svārstība <output id="o_sens-swing"></output></label><input type="range" id="sens-swing" min="5" max="50" step="5" value="25"></div>
+        </div>
+        <div class="legend"><span>Statuss: <span class="badge V">V</span> pārbaudīts <span class="badge B">B</span> aptuvens <span class="badge C">C</span> pieņēmums</span></div>
+        <div class="chart tall"><div class="cv"><canvas id="c-sens" role="img" aria-label="Jutīguma analīze"></canvas></div></div>
+      </section>
+
+      <section id="t-pienemumi" hidden>
+        <p>Katram lielumam norādīts avots un pamatojums. Mainiet vērtību, un visi grafiki pārrēķinās.</p>
+        <div class="legend"><span><span class="badge V">V</span> pārbaudīts primārajā avotā</span><span><span class="badge A">A</span> atrasts, jāapstiprina</span><span><span class="badge B">B</span> aptuvens novērtējums</span><span><span class="badge C">C</span> modeļa pieņēmums</span></div>
+        <button class="btn" id="reset-par" type="button">Atjaunot noklusējuma vērtības</button>
+        <div id="par-list"></div>
+        <h3 style="margin-top:18px">No bāzes datiem atvasinātie lielumi</h3>
+        <div class="tablewrap"><table id="cal-table"></table></div>
+      </section>
+
+      <section id="t-dati" hidden></section>
+
+      <section id="t-metodika" hidden>
+        <h2>Kā modelis darbojas</h2>
+        <ol class="method">
+          <li><b>Ārstu laiks ir ierobežots.</b> Speciālistu kopējais darba laiks īstermiņā nemainās un dalās starp valsts un maksas darbu. Valsts darbam atvēlētā daļa mainās līdz ar attiecību starp valsts tarifu un maksas cenu (Biglaiser un Ma, 2007).</li>
+          <li><b>Valsts rinda.</b> Apkalpoto epizožu skaitu ierobežo mazākais no diviem: apmaksātā kvota un ārstu kapacitāte. Gaidīšanas laiks = rinda / apkalpošanas ātrums.</li>
+          <li><b>Cenu loks.</b> Garāka rinda → vairāk cilvēku maksā paši → pārprasījums maksas segmentā → cena kāpj → ārstam izdevīgāk strādāt par maksu → rinda vēl garāka.</li>
+          <li><b>Budžeta loks.</b> Gaidīšana ilgāk par drošo robežu rada novēršamas akūtas hospitalizācijas. To izmaksas ir jāsedz jebkurā gadījumā, un tās izspiež ambulatoro finansējumu, ja kopbudžets ir fiksēts.</li>
+          <li><b>Kalibrācija.</b> Bāzes gadā sistēma ir līdzsvarā. Scenārijs «finansējums nemainīgs» pasliktinās tikai vajadzības izaugsmes, ienākumu kāpuma un nemainīga ārstu skaita dēļ.</li>
+        </ol>
+        <h2>Ko modelis nedara</h2>
+        <ul class="method">
+          <li>Neprognozē. Nav kalibrēts pret vēsturiskām rindu laika rindām, jo tādu publiski nav.</li>
+          <li>Neaplūko primāro aprūpi, zāles un stacionāru. Tie ir fiksēti.</li>
+          <li>Nesadala pa specialitātēm un reģioniem: viens vidējais specialists.</li>
+          <li>Neietver ienākumu nevienlīdzību. Eurostat dati rāda, ka zemākajā ienākumu kvintilī 6,8 % cilvēku neapmierinātu vajadzību rindas dēļ, augstākajā 2,7 %.</li>
+          <li>Darba zaudējumu ieguvums ir ilustratīvs un atkarīgs no zaudēto darba dienu skaita, kam Latvijas novērtējuma nav.</li>
+        </ul>
+        <p class="cap">Pilni vienādojumi, pārbaudes un datu atjaunināšanas skripti ir mapē <code>rinda_modelis/</code>. Šī lapa izmanto to pašu parametru reģistru un JavaScript modeli, kas ar Python versiju sakrīt līdz 9 zīmēm (automātisks tests).</p>
+      </section>
+    </main>
+  </div>
+  <p class="foot">Avoti: Eurostat API (hlth_sha11_hf, hlth_sha11_hchf, hlth_rs_prs2, hlth_silc_08, demo_pjan, nama_10_gdp), NVD atvērtie dati (data.gov.lv), Veselības ministrijas paziņojums par 2026. gada budžetu (LV portāls, 04.12.2025.). Dati nolasīti <span id="upd"></span>.</p>
+</div>
+
+<script>/*@@MODEL_JS@@*/</script>
+<script>
+const DATA = /*@@DATA@@*/;
+(function(){
+"use strict";
+const REG = DATA.registry, SCN = DATA.scenarios, VER = DATA.verified;
+const $ = (s, r) => (r || document).querySelector(s);
+const fmt = (x, d) => { d = d === undefined ? 1 : d; if (!isFinite(x)) return "–"; return x.toFixed(d).replace(".", ","); };
+const sgn = (x, d) => (x > 0 ? "+" : x < 0 ? "−" : "") + fmt(Math.abs(x), d);
+const pct = (x, d) => fmt(x * 100, d === undefined ? 1 : d) + " %";
+const esc = s => String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+/* ---------- stāvoklis ---------- */
+const defaults = () => { const o = {}; REG.forEach(p => o[p.key] = p.default); return o; };
+let P = defaults();
+let POL = Object.assign({}, SCN[0].policy);
+let YEARS = 10, activePreset = null, tab = "rezultati";
+
+/* ---------- krāsas un diagrammas ---------- */
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const col = () => ({ scn: css("--accent"), base: css("--base"), warn: css("--warn"), good: css("--good"), amber: css("--amber"), violet: css("--violet"),
+  text: css("--text"), muted: css("--muted"), grid: css("--grid") });
+const charts = {};
+function killCharts(){ Object.keys(charts).forEach(k => { charts[k].destroy(); delete charts[k]; }); }
+function draw(id, cfg){
+  const el = document.getElementById(id); if (!el) return;
+  if (charts[id]) { charts[id].data = cfg.data; charts[id].options = cfg.options; charts[id].update("none"); }
+  else charts[id] = new Chart(el.getContext("2d"), cfg);
+}
+function baseOpts(c, o){
+  o = o || {};
+  return { responsive:true, maintainAspectRatio:false, animation:false, interaction:{mode:"index", intersect:false},
+    plugins:{ legend:{ display:o.legend !== false, labels:{ color:c.muted, boxWidth:22, usePointStyle:true, pointStyle:'line', font:{size:11} } },
+      tooltip:{ callbacks:{ label: it => " " + it.dataset.label + ": " + fmt(it.parsed.y, o.dec === undefined ? 1 : o.dec) + (o.unit || "") } } },
+    scales:{ x:{ ticks:{ color:c.muted, autoSkip:false, maxRotation:0, font:{size:11}, callback:function(v){ const l = +this.getLabelForValue(v), st = Math.max(1, Math.ceil(YEARS / 8)); return (Number.isInteger(l) && (l - 2026) % st === 0) ? String(l) : ''; } }, grid:{ color:c.grid } },
+             y:{ ticks:{ color:c.muted, font:{size:11}, precision:o.precision, callback:v => fmt(v, o.dec === undefined ? 1 : o.dec).replace(/,0$/, "") }, grid:{ color:c.grid }, min:o.min, title:{ display:!!o.title, text:o.title, color:c.muted, font:{size:11} } } } };
+}
+function line(label, data, color, dash, width){ return { label, data, borderColor:color, backgroundColor:color, borderWidth:width || 2.2, borderDash:dash || [], pointRadius:0, pointHoverRadius:3, tension:.2 }; }
+
+/* ---------- modelis ---------- */
+let SIM, BASE, CAL;
+const basePolicy = () => Object.assign({}, SCN[0].policy);
+function compute(){ CAL = RM.calibrate(P); SIM = RM.simulate(P, POL, YEARS); BASE = RM.simulate(P, basePolicy(), YEARS); }
+
+/* ---------- vadība ---------- */
+const sliders = [
+  ["d_tarifs", v => POL.d_tarifs = v / 100, () => POL.d_tarifs * 100, v => sgn(v, 0) + " %"],
+  ["d_apjoms", v => POL.d_apjoms = v / 100, () => POL.d_apjoms * 100, v => sgn(v, 0) + " %"],
+  ["admin_red", v => POL.admin_red = v / 100, () => POL.admin_red * 100, v => fmt(v, 0) + " pp"],
+  ["ramp_years", v => POL.ramp_years = v, () => POL.ramp_years, v => fmt(v, 1) + " g."],
+  ["delay_years", v => POL.delay_years = v, () => POL.delay_years, v => fmt(v, 1) + " g."],
+  ["tarifs_aug", v => POL.tarifs_aug = v / 100, () => POL.tarifs_aug * 100, v => fmt(v, 1) + " %/g."],
+  ["apjoms_aug", v => POL.apjoms_aug = v / 100, () => POL.apjoms_aug * 100, v => fmt(v, 1) + " %/g."],
+  ["fte_aug", v => POL.fte_aug = v / 100, () => POL.fte_aug * 100, v => fmt(v, 1) + " %/g."],
+  ["fte_lag", v => POL.fte_lag = v, () => POL.fte_lag, v => fmt(v, 0) + " g."],
+  ["years", v => YEARS = v, () => YEARS, v => fmt(v, 0) + " g."]
+];
+function syncControls(){
+  sliders.forEach(([id, , get, f]) => { const el = $("#" + id); el.value = get(); $("#o_" + id).textContent = f(+el.value); });
+  $("#auto_fund").checked = !!POL.auto_fund;
+  document.querySelectorAll(".chip").forEach((b, i) => b.setAttribute("aria-pressed", String(i === activePreset)));
+}
+sliders.forEach(([id, set, , f]) => $("#" + id).addEventListener("input", e => { set(+e.target.value); $("#o_" + id).textContent = f(+e.target.value); activePreset = null; refresh(); }));
+$("#auto_fund").addEventListener("change", e => { POL.auto_fund = e.target.checked; activePreset = null; refresh(); });
+const chips = $("#chips");
+SCN.forEach((s, i) => { const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.textContent = s.name; b.title = s.name;
+  b.addEventListener("click", () => { POL = Object.assign({}, s.policy); activePreset = i; refresh(); }); chips.appendChild(b); });
+
+/* ---------- cilnes ---------- */
+const TABS = [["rezultati","Rezultāti"],["scenariji","Scenāriju salīdzinājums"],["jutiba","Jutīgums"],["pienemumi","Pieņēmumi"],["dati","Datu pārbaude"],["metodika","Metodika"]];
+const tabsEl = $("#tabs");
+TABS.forEach(([id, name]) => { const b = document.createElement("button"); b.className = "tab"; b.type = "button"; b.id = "tb-" + id; b.setAttribute("role", "tab"); b.textContent = name;
+  b.addEventListener("click", () => { location.hash = id; }); tabsEl.appendChild(b); });
+function showTab(){
+  const h = location.hash.replace("#", ""); tab = TABS.some(t => t[0] === h) ? h : "rezultati";
+  TABS.forEach(([id]) => { $("#t-" + id).hidden = id !== tab; $("#tb-" + id).setAttribute("aria-selected", String(id === tab)); });
+  killCharts(); render();
+}
+window.addEventListener("hashchange", showTab);
+
+/* ---------- atveidošana ---------- */
+function refresh(){ syncControls(); compute(); render(); }
+function render(){
+  const w = $("#warns"); w.innerHTML = CAL.warn.map(t => '<div class="warnbox">' + esc(t) + '</div>').join("");
+  ({ rezultati:rRez, scenariji:rSc, jutiba:rSens, pienemumi:rPar, dati:rDati, metodika:()=>{} })[tab]();
+}
+const X = () => SIM.map(r => String(Math.round(r.gads * 10) / 10).replace(/\.0$/, ""));
+const last = a => a[a.length - 1];
+
+function rRez(){
+  const c = col(), S = RM.summary(SIM, BASE), B = RM.summary(BASE);
+  const k = (label, v, d, txt) => { const cls = Math.abs(d) < 1e-9 ? "na" : d > 0 ? "bad" : "ok"; return '<div class="kpi"><div class="k">' + label + '</div><div class="v">' + v + '</div><div class="d ' + cls + '">' + txt + ' pret bāzi</div></div>'; };
+  $("#kpis").innerHTML =
+    k("Gaidīšana beigās, mēneši", fmt(S.gaidisana_beigas_men), S.gaidisana_beigas_men - B.gaidisana_beigas_men, sgn(S.gaidisana_beigas_men - B.gaidisana_beigas_men)) +
+    k("Pacientu tiešo maksājumu daļa", pct(S.oop_dala_beigas), S.oop_dala_beigas - B.oop_dala_beigas, sgn((S.oop_dala_beigas - B.oop_dala_beigas) * 100) + " pp") +
+    k("Maksas cena beigās, EUR", fmt(S.maksas_cena_beigas, 0), S.maksas_cena_beigas - B.maksas_cena_beigas, sgn(S.maksas_cena_beigas - B.maksas_cena_beigas, 0)) +
+    k("Novēršamas akūtas hospitalizācijas, tūkst./g.", fmt(S.akutie_beigas_tuks, 0), S.akutie_beigas_tuks - B.akutie_beigas_tuks, sgn(S.akutie_beigas_tuks - B.akutie_beigas_tuks, 0)) +
+    '<div class="kpi"><div class="k">Saistošais ierobežojums beigās</div><div class="v" style="font-size:1.15rem;padding-top:6px">' + S.saistosais_beigas + '</div><div class="d na">mazākais no kvotas un ārstu kapacitātes</div></div>';
+  const x = X();
+  const mk = (id, title, sets, o) => {
+    if (!document.getElementById(id)) { const d = document.createElement("div"); d.className = "chart"; d.innerHTML = '<h3>' + title + '</h3><div class="cv"><canvas id="' + id + '" role="img" aria-label="' + title + '"></canvas></div>'; $("#charts-res").appendChild(d); }
+    draw(id, { type:"line", data:{ labels:x, datasets:sets }, options:baseOpts(c, o) });
+  };
+  const sa = (k, f) => SIM.map(r => r[k] * (f || 1)), ba = (k, f) => BASE.map(r => r[k] * (f || 1));
+  mk("c1", "Gaidīšanas laiks valsts rindā, mēneši", [line("Bāze", ba("gaidisana_men"), c.base, [5,4]), line("Scenārijs", sa("gaidisana_men"), c.scn), line("Droša robeža", x.map(() => P.W_safe_m), c.warn, [2,3], 1.2)], { min:0, unit:" mēn." });
+  mk("c2", "Maksājošo daļa un tiešo maksājumu daļa, %", [line("Bāze: maksājošie", ba("maksajoso_dala", 100), c.base, [5,4]), line("Maksājošo daļa", sa("maksajoso_dala", 100), c.scn), line("Tiešie maksājumi kopējos izdevumos", sa("oop_dala", 100), c.warn)], { unit:" %" });
+  mk("c3", "Maksas cena un valsts tarifs, EUR par epizodi", [line("Bāze: maksas cena", ba("maksas_cena"), c.base, [5,4]), line("Maksas cena", sa("maksas_cena"), c.scn), line("Valsts tarifs", sa("tarifs"), c.good)], { unit:" EUR", dec:0 });
+  mk("c4", "Ārstu laika daļa valsts darbā, %", [line("Bāze", ba("valsts_laika_dala", 100), c.base, [5,4]), line("Scenārijs", sa("valsts_laika_dala", 100), c.scn)], { unit:" %" });
+  mk("c5", "Valsts apmaksātais apjoms: kvota un kapacitāte, milj. epizožu", [line("Kvota", sa("kvota_milj"), c.good, [6,4]), line("Ārstu kapacitāte", sa("kapacitate_valsts_milj"), c.warn, [2,3]), line("Faktiski apkalpots", sa("apkalpots_valsts_milj"), c.scn)], { unit:" milj.", dec:2 });
+  mk("c6", "Novēršamas akūtas hospitalizācijas, tūkst. gadā", [line("Bāze", ba("akutie_novers_tuks"), c.base, [5,4]), line("Scenārijs", sa("akutie_novers_tuks"), c.scn)], { unit:" tūkst.", dec:0 });
+  const cum = (k) => { let a = 0; return SIM.map((r, i) => { const v = (r[k] - BASE[i][k]) * 0.25; a += i < SIM.length - 1 ? v : 0; return a; }); };
+  const cv = cum("valsts_kopa"), cp = cum("tiesie_maksajumi_kopa"), cd = cum("prod_zaudejumi"), ct = cv.map((v, i) => v + cp[i] + cd[i]);
+  draw("c-cum", { type:"line", data:{ labels:x, datasets:[ line("Valsts izdevumi", cv, c.scn), line("Pacientu tiešie maksājumi", cp, c.amber), line("Darba zaudējumi (ilustratīvi)", cd, c.violet), line("Kopā", ct, c.text, [], 3) ] }, options:baseOpts(c, { unit:" milj. EUR", dec:0, precision:0 }) });
+  const d = (v, t) => '<div class="kpi"><div class="k">' + t + '</div><div class="v" style="font-size:1.3rem">' + sgn(v, 0) + '</div></div>';
+  $("#kpis2").innerHTML = d(S.d_valsts_izdevumi, "Valsts izdevumi") + d(S.d_tiesie_maksajumi, "Pacientu tiešie maksājumi") + d(S.d_prod_zaudejumi, "Darba zaudējumi (ilustratīvi)") + d(S.d_sabiedriskie_kopa, "Sabiedriskās izmaksas kopā");
+}
+
+function rSc(){
+  const c = col();
+  const metrics = { gaidisana_men:["Gaidīšanas laiks, mēneši",1," mēn."], maksas_cena:["Maksas cena, EUR",0," EUR"], oop_dala:["Tiešo maksājumu daļa kopējos izdevumos, %",1," %",100], valsts_laika_dala:["Valsts darba laika daļa, %",1," %",100], apkalpots_valsts_milj:["Apkalpotās valsts epizodes, milj.",2," milj."], akutie_novers_tuks:["Novēršamas akūtas hospitalizācijas, tūkst.",0," tūkst."] };
+  const sel = $("#sc-metric"); if (!sel.options.length) { Object.keys(metrics).forEach(k => sel.add(new Option(metrics[k][0], k))); sel.addEventListener("change", rSc); }
+  const m = metrics[sel.value], pal = [c.base, c.warn, c.amber, c.violet, c.scn, c.good, c.text];
+  const runs = SCN.map(s => RM.simulate(P, s.policy, YEARS));
+  draw("c-sc", { type:"line", data:{ labels:X(), datasets:runs.map((r, i) => line(SCN[i].name.slice(0, 60), r.map(q => q[sel.value] * (m[3] || 1)), pal[i % pal.length], i === 0 ? [5,4] : [], 2.2)) }, options:Object.assign(baseOpts(c, { unit:m[2], dec:m[1], title:m[0] }), {}) });
+  const b = runs[0], head = ["Scenārijs", "Gaidīšana 3. g., mēn.", "Gaidīšana beigās, mēn.", "Saistošais beigās", "Tiešo maks. daļa beigās", "Δ valsts izd.", "Δ pacientu maks.", "Δ darba zaud.", "Δ kopā"];
+  let h = "<tr>" + head.map(t => "<th>" + t + "</th>").join("") + "</tr>";
+  const cl = v => v < -0.5 ? "neg" : v > 0.5 ? "pos" : "";
+  runs.forEach((r, i) => { const s = RM.summary(r, b), t3 = r[Math.min(12, r.length - 1)];
+    h += '<tr' + (i === activePreset ? ' class="sel"' : "") + "><td>" + esc(SCN[i].name) + "</td><td>" + fmt(t3.gaidisana_men) + "</td><td>" + fmt(s.gaidisana_beigas_men) + "</td><td>" + s.saistosais_beigas + "</td><td>" + pct(s.oop_dala_beigas) + "</td>" +
+      ["d_valsts_izdevumi","d_tiesie_maksajumi","d_prod_zaudejumi","d_sabiedriskie_kopa"].map(k => '<td class="' + cl(s[k]) + '">' + sgn(s[k], 0) + "</td>").join("") + "</tr>"; });
+  $("#sc-table").innerHTML = h;
+}
+
+function rSens(){
+  const c = col(), metric = $("#sens-metric").value, swing = +$("#sens-swing").value / 100;
+  $("#o_sens-swing").textContent = "±" + Math.round(swing * 100) + " %";
+  const skip = ["B0","vhi_share0","s_lo","s_hi","crowd"], keys = REG.map(p => p.key).filter(k => skip.indexOf(k) < 0);
+  const res = RM.sensitivity(P, POL, keys, metric, swing, YEARS).slice(0, 14).reverse();
+  const by = {}; REG.forEach(p => by[p.key] = p);
+  const labels = res.map(r => by[r.parametrs].label.split(/[(:]/)[0].trim().slice(0, 52) + " [" + by[r.parametrs].status + "]");
+  const o = baseOpts(c, { dec:2 }); o.indexAxis = "y"; o.scales.x.title = { display:true, text:"Izmaiņa pret pamatvērtību", color:c.muted };
+  o.scales.y.ticks.callback = function(v){ return labels[v]; }; o.scales.x.ticks.callback = v => fmt(v, 1); o.scales.x.ticks.autoSkip = true; o.scales.x.ticks.maxRotation = 0; o.scales.y.ticks.autoSkip = false; o.scales.y.ticks.font = { size:10.5 };
+  o.scales.x.stacked = false; o.interaction = { mode:"nearest", intersect:true };
+  o.plugins.tooltip.callbacks.label = it => " " + it.dataset.label + ": " + sgn(it.parsed.x, 2);
+  draw("c-sens", { type:"bar", data:{ labels, datasets:[ { label:"−" + Math.round(swing * 100) + " %", data:res.map(r => r.zems - r.bazes), backgroundColor:c.scn }, { label:"+" + Math.round(swing * 100) + " %", data:res.map(r => r.augsts - r.bazes), backgroundColor:c.amber } ] }, options:o });
+  $("#sens-metric").onchange = rSens; $("#sens-swing").oninput = rSens;
+}
+
+let parBuilt = false;
+function rPar(){
+  const list = $("#par-list");
+  if (!parBuilt) {
+    let g = "", h = "";
+    REG.forEach(p => {
+      if (p.group !== g) { g = p.group; h += '<h3 style="margin-top:18px">' + esc(g) + "</h3>"; }
+      const sc = p.scale || 1;
+      h += '<div class="row"><div><label for="p_' + p.key + '" style="font-size:.9rem">' + esc(p.label) + ' <span class="badge ' + p.status + '" title="' + esc(DATA.status_text[p.status]) + '">' + p.status + '</span></label>' +
+        '<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="number" id="p_' + p.key + '" data-k="' + p.key + '" min="' + p.lo * sc + '" max="' + p.hi * sc + '" step="' + p.step * sc + '" value="' + (+(p.default * sc).toPrecision(6)) + '"><span class="meta" style="white-space:nowrap">' + esc(p.unit) + '</span></div></div>' +
+        '<div class="meta"><p><b>Avots:</b> ' + esc(p.source) + '</p><p style="margin:0"><b>Pamatojums:</b> ' + esc(p.rationale) + "</p></div></div>";
+    });
+    list.innerHTML = h; parBuilt = true;
+    list.addEventListener("input", e => { const k = e.target.dataset.k; if (!k) return; const p = REG.find(q => q.key === k), v = parseFloat(e.target.value); if (isFinite(v)) { P[k] = Math.min(p.hi, Math.max(p.lo, v / (p.scale || 1))); compute(); calTable(); } });
+    $("#reset-par").addEventListener("click", () => { P = defaults(); REG.forEach(p => $("#p_" + p.key).value = +(p.default * (p.scale || 1)).toPrecision(6)); compute(); calTable(); });
+  }
+  calTable();
+}
+function calTable(){
+  const c = CAL, rows = [["Valsts apmaksātais apjoms V0, milj. epizožu/g.", fmt(c.V0 / 1e6, 2)], ["Nosūtījumi R0, milj./g.", fmt(c.R0 / 1e6, 2)], ["Maksas pieprasījums D0, milj./g.", fmt(c.D0 / 1e6, 2)],
+    ["Rinda bāzē Q0, tūkst. epizožu", fmt(c.Q0 / 1e3, 0)], ["Ārstu laika daļa valsts darbā s0", fmt(c.s0, 3)], ["Epizodes uz PSE gadā", fmt(c.m, 0)],
+    ["Kopējie veselības izdevumi, milj. EUR", fmt(c.the0, 0)], ["Pārējie tiešie maksājumi (zāles, zobi u.c.), milj. EUR", fmt(c.o_other, 0)], ["Novēršamas akūtas hospitalizācijas bāzē, tūkst./g.", fmt(c.A0 / 1e3, 1)]];
+  $("#cal-table").innerHTML = rows.map(r => "<tr><td>" + r[0] + '</td><td>' + r[1] + "</td></tr>").join("");
+}
+
+function rDati(){
+  const c = col(), E = VER.eurostat, N = VER.nvd_ambulatorie || {}, el = $("#t-dati");
+  if (!el.dataset.built) {
+    el.dataset.built = "1";
+    el.innerHTML = '<p>Dati nolasīti no primārajiem avotiem <b>' + esc(VER.atjaunots) + '</b>. Statuss <span class="badge V">V</span> pie parametriem nozīmē, ka vērtība apstiprināta šajos datos.</p>' +
+      '<div class="grid2"><div class="chart"><h3>Pacientu tiešie maksājumi, % no veselības izdevumiem</h3><div class="cv"><canvas id="d1" role="img" aria-label="Tiešie maksājumi Latvijā un ES"></canvas></div><p class="cap">Eurostat hlth_sha11_hf, HF3. 2021. g. kritums skaidrojams ar COVID-19 publisko izdevumu kāpumu.</p></div>' +
+      '<div class="chart"><h3>Neapmierinātā vajadzība, % iedzīvotāju 16+</h3><div class="cv"><canvas id="d2" role="img" aria-label="Neapmierinātā vajadzība"></canvas></div><p class="cap" id="d2cap"></p></div></div>' +
+      '<h2 style="margin-top:20px">Ambulatorā aprūpe: kas maksā (2024)</h2><div class="tablewrap"><table id="d-amb"></table></div><p class="cap" id="d-amb-cap"></p>' +
+      '<h2 style="margin-top:20px">Valsts apmaksātais specialistu apjoms (NVD atvērtie dati)</h2><div class="tablewrap"><table id="d-nvd"></table></div><p class="cap" id="d-nvd-cap"></p>' +
+      '<h2 style="margin-top:20px">Modeļa pieņēmumi pret datiem</h2><div class="tablewrap"><table id="d-chk"></table></div>';
+  }
+  const hf = E.sha_hf_PC_CHE, yrs = Object.keys(hf["LV|HF3"]).sort();
+  draw("d1", { type:"line", data:{ labels:yrs, datasets:[ line("Latvija", yrs.map(y => hf["LV|HF3"][y]), c.scn, [], 3), line("ES-27", yrs.map(y => hf["EU27_2020|HF3"][y]), c.base, [5,4]), line("Modeļa bāze", yrs.map(() => P.oop_share0 * 100), c.warn, [2,3], 1.2) ] }, options:baseOpts(c, { unit:" %", min:10 }) });
+  const um = E.unmet_pc, yy = Object.keys(um["LV|TOTAL|WLIST"]).sort();
+  draw("d2", { type:"line", data:{ labels:yy, datasets:[ line("LV: gaidīšanas saraksts", yy.map(y => um["LV|TOTAL|WLIST"][y]), c.scn, [], 3), line("LV: pārāk dārgi", yy.map(y => um["LV|TOTAL|TXP"][y]), c.amber), line("ES: gaidīšanas saraksts", yy.map(y => um["EU27_2020|TOTAL|WLIST"][y]), c.base, [5,4]) ] }, options:baseOpts(c, { unit:" %", min:0 }) });
+  $("#d2cap").textContent = "Gaidīšanas dēļ neapmierinātā vajadzība Latvijā " + yy[0] + ". g. " + fmt(um["LV|TOTAL|WLIST"][yy[0]]) + " % → " + last(yy) + ". g. " + fmt(um["LV|TOTAL|WLIST"][last(yy)]) + " % (ES " + fmt(um["EU27_2020|TOTAL|WLIST"][last(yy)]) + " %). Zemākajā ienākumu kvintilī " + fmt(um["LV|QU1|WLIST"]["2024"]) + " % (rinda) un " + fmt(um["LV|QU1|TXP"]["2024"]) + " % (cena), augstākajā " + fmt(um["LV|QU5|WLIST"]["2024"]) + " % un " + fmt(um["LV|QU5|TXP"]["2024"]) + " %.";
+  const hc = E.sha_hc_hf_EUR_HAB, g = (geo, f) => (hc[geo + "|HC13_23|" + f] || {})["2024"] || 0;
+  $("#d-amb").innerHTML = "<tr><th>Valsts</th><th>Kopā, EUR/iedz.</th><th>Valsts (HF1)</th><th>Brīvpr. apdr. (HF2)</th><th>Pacienti paši (HF3)</th></tr>" +
+    [["LV","Latvija"],["EU27_2020","ES-27"]].map(a => { const t = g(a[0], "TOT_HF"); return "<tr><td>" + a[1] + "</td><td>" + fmt(t, 0) + "</td><td>" + pct(g(a[0], "HF1") / t, 0) + "</td><td>" + pct(g(a[0], "HF2") / t, 0) + "</td><td>" + pct(g(a[0], "HF3") / t, 0) + "</td></tr>"; }).join("");
+  const pop = E.iedzivotaji.TOTAL["2025"] / 1e6;
+  $("#d-amb-cap").textContent = "Latvijā pacientu tiešie ambulatorie maksājumi ≈ " + fmt(g("LV","HF3") * pop, 0) + " milj. EUR pret valsts " + fmt(g("LV","HF1") * pop, 0) + " milj. EUR. Grupā ir arī zobārstniecība un ģimenes ārsti, tāpēc tā ir augšējā robeža specialistiem (modelis: ≈ " + fmt(CAL.D0 * P.p0 / 1e6, 0) + " milj. EUR).";
+  const ny = Object.keys(N).sort();
+  $("#d-nvd").innerHTML = "<tr><th>Gads</th><th>SAVA epizodes</th><th>t.sk. laboratorija</th><th>bez laboratorijas</th><th>SAVA apmeklējumi</th><th>Ārsti ar SAVA darbu</th></tr>" +
+    ny.map(y => "<tr><td>" + y + "</td><td>" + N[y].sava_epizodes.toLocaleString("lv-LV") + "</td><td>" + N[y].sava_laboratorijas_epizodes.toLocaleString("lv-LV") + "</td><td>" + N[y].sava_epizodes_bez_laboratorijas.toLocaleString("lv-LV") + "</td><td>" + N[y].sava_apmeklejumi.toLocaleString("lv-LV") + "</td><td>" + N[y].sava_arstu_skaits_unikali.toLocaleString("lv-LV") + "</td></tr>").join("");
+  if (ny.length) $("#d-nvd-cap").textContent = "Apjoms 2023–2025 praktiski nemainīgs, ārstu skaits aug. Vidējais tarifs = " + fmt(P.E0, 1) + " milj. EUR / " + fmt(N[last(ny)].sava_epizodes_bez_laboratorijas / 1e6, 2) + " milj. epizožu ≈ " + fmt(P.E0 * 1e6 / N[last(ny)].sava_epizodes_bez_laboratorijas, 0) + " EUR (modelī " + fmt(P.tau0, 0) + "). Laboratorijas izmeklējumiem VM budžetā ir atsevišķa rinda (62,5 milj. EUR).";
+  const ar = E.arsti_nr.PRACT, ikp = E.ikp_meur.LV["2024"], emp = E.nodarbinati_tuks.LV["2024"], pp = E.iedzivotaji.TOTAL, sh = (E.dala_65plus_pc || {}).PC_Y65_MAX || {};
+  const avg = yrs.filter(y => y >= "2019" && y <= "2024").reduce((a, y) => a + hf["LV|HF3"][y], 0) / yrs.filter(y => y >= "2019" && y <= "2024").length;
+  const chk = [["Tiešo maksājumu daļa", pct(P.oop_share0), "vidēji 2019–2024: " + fmt(avg) + " %"], ["Brīvprātīgā apdrošināšana", pct(P.vhi_share0), fmt(hf["LV|HF2"]["2024"]) + " % (2024)"],
+    ["Darba dienas vērtība", fmt(P.v_day, 0) + " EUR", fmt(ikp * 1e6 / (emp * 1e3) / 250, 0) + " EUR (IKP / nodarbinātie / 250)"], ["Ārstu skaita izaugsme", pct(P.g_H), "praktizējošie 2022→2024: " + sgn(((ar["2024"] / ar["2022"]) ** 0.5 - 1) * 100, 1) + " % gadā"],
+    ["Vajadzības izaugsme", pct(P.g_d), "iedzīvotāji 2024→2025: " + sgn((pp["2025"] / pp["2024"] - 1) * 100, 1) + " %; 65+ daļa " + (sh["2015"] || "?") + " → " + (sh["2025"] || "?") + " %"]];
+  $("#d-chk").innerHTML = "<tr><th>Parametrs</th><th>Modeļa vērtība</th><th>Datos</th></tr>" + chk.map(r => "<tr><td>" + r[0] + "</td><td>" + r[1] + "</td><td>" + r[2] + "</td></tr>").join("");
+}
+
+/* ---------- tēma ---------- */
+const rerender = () => { killCharts(); render(); };
+if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rerender);
+new MutationObserver(rerender).observe(document.documentElement, { attributes:true, attributeFilter:["data-theme"] });
+
+$("#upd").textContent = VER.atjaunots;
+activePreset = 0;
+syncControls(); compute(); showTab();
+})();
+</script>
