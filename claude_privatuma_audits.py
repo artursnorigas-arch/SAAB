@@ -22,6 +22,7 @@ Kontrole un uzraudzība:
     --status                            vai grafiks darbojas, vai skripts nav mainīts, cik sen pārbaudīts
     --history                           pēdējo palaišanu vēsture
     --accept ID|ALL / --unaccept ID     atzīt pārbaudītu atradumu par drošu
+    --fix-all [--yes]                   viss vienā reizē (atļaujas + Desktop Commander)
     --fix-permissions [--yes]           riskantās atļaujas no 'allow' uz 'ask' (Claude vienmēr jautās)
     --checklist / --checklist-done      manuālā pārbaude tam, ko nevar redzēt lokāli (web, telefons, Connectors)
 
@@ -1108,6 +1109,106 @@ def cmd_fix_permissions(cfg, extra_repos, yes, paths=()):
     return 0
 
 
+def claude_running():
+    if SYS != "Darwin":
+        return False
+    try:
+        return subprocess.run(["pgrep", "-x", "Claude"], capture_output=True).returncode == 0
+    except Exception:
+        return False
+
+
+def quit_claude(timeout=25):
+    """Korekti aizver Claude Desktop (macOS) un gaida, līdz process beidzas."""
+    try:
+        subprocess.run(["osascript", "-e", 'tell application "Claude" to quit'], capture_output=True, timeout=15)
+    except Exception:
+        pass
+    for _ in range(timeout):
+        if not claude_running():
+            return True
+        time.sleep(1)
+    return not claude_running()
+
+
+def fix_desktop_commander(cfg_path):
+    """telemetryEnabled=false; allowedDirectories = esošās + tavas darba mapes, kas pastāv. Ar rezerves kopiju."""
+    c = load_json(cfg_path, None)
+    if not isinstance(c, dict):
+        print(f"  ! Desktop Commander konfigurāciju neizdevās nolasīt: {cfg_path}")
+        return False
+    backup = cfg_path.with_name(cfg_path.name + ".bak-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
+    shutil.copy2(cfg_path, backup)
+    wanted = [str(HOME / "Developer"), str(HOME / "Documents" / "LSB")]
+    dirs = list(c.get("allowedDirectories") or [])
+    for d in wanted:
+        if Path(d).is_dir() and d not in dirs:
+            dirs.append(d)
+    c["telemetryEnabled"] = False
+    c["allowedDirectories"] = dirs
+    tmp = cfg_path.with_name(cfg_path.name + ".tmp")
+    tmp.write_text(json.dumps(c, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(tmp, cfg_path)
+    chk = load_json(cfg_path, {})
+    ok = chk.get("telemetryEnabled") is False and bool(chk.get("allowedDirectories"))
+    print(f"  {'✔' if ok else '!'} telemetrija izslēgta; atļautās mapes: {', '.join(chk.get('allowedDirectories') or ['(nav)']).replace(str(HOME), '~')}")
+    print(f"    rezerves kopija: {backup.name}")
+    return ok
+
+
+def cmd_fix_all(cfg, extra_repos, yes):
+    """Viss vienā reizē: aizver Claude, sakārto atļaujas un Desktop Commander, atver Claude, parāda rezultātu."""
+    print("Šī komanda:\n  1) aizvērs Claude Desktop (ja darbojas) un pēc tam to atkal atvērs;\n"
+          "  2) riskantās atļaujas pārvietos uz 'ask' (Claude vienmēr jautās);\n"
+          "  3) Desktop Commander: izslēgs telemetriju un ierobežos mapes uz ~/Developer un ~/Documents/LSB.\n"
+          "Pirms katras izmaiņas tiek izveidota rezerves kopija (.bak-…).")
+    if not yes:
+        try:
+            ans = input("\nTurpināt? [j/N] ").strip().lower()
+        except EOFError:
+            ans = ""
+        if ans not in ("j", "y", "jā", "ja", "yes"):
+            print("Atcelts. Nekas netika mainīts.")
+            return 0
+    was_running = claude_running()
+    if was_running:
+        print("\n• Aizver Claude Desktop…")
+        if not quit_claude():
+            print("  ! Claude Desktop neaizvērās. Aizver to ar Cmd+Q un palaid komandu vēlreiz. Nekas netika mainīts.")
+            return 1
+        print("  ✔ aizvērts")
+    print("\n• Atļaujas:")
+    cmd_fix_permissions(cfg, extra_repos, True)
+    print("\n• Desktop Commander:")
+    cf = [HOME / c for c in DC_CONFIGS if (HOME / c).is_file()]
+    if cf:
+        fix_desktop_commander(cf[0])
+    else:
+        print("  (konfigurācijas fails nav atrasts, izlaists)")
+    if was_running and SYS == "Darwin":
+        print("\n• Atver Claude Desktop atkal…")
+        subprocess.run(["open", "-a", "Claude"], capture_output=True)
+    print("\n== REZULTĀTS ==")
+    dc = [f for f in check_desktop_commander(cfg) if f.severity in ("MEDIUM", "HIGH")]
+    targets, _ = default_targets(cfg, extra_repos)
+    left = 0
+    for f in walk(targets, cfg):
+        if f.name in ("settings.json", "settings.local.json") and ".claude" in f.parts \
+                and not ({"plugins", "rpm", "skills", "marketplaces", "synced"} & set(f.parts)):
+            d = load_json(f, {})
+            al = ((d.get("permissions") or {}).get("allow") if isinstance(d, dict) else None) or []
+            left += sum(1 for a in al if isinstance(a, str) and risky_perm(a))
+    print(f"  Desktop Commander atlikušie MEDIUM/HIGH atradumi: {len(dc)}")
+    print(f"  Riskantas atļaujas sarakstā 'allow': {left}")
+    if not dc and not left:
+        print("\n✔ VISS SAKĀRTOTS.")
+        return 0
+    for f in dc:
+        print(f"  - {f.title}")
+    print("\n! Daļa nav sakārtota (sk. augstāk).")
+    return 1
+
+
 # ----------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser(description="Claude privātuma audits")
@@ -1133,7 +1234,9 @@ def main():
     ap.add_argument("--unaccept", nargs="+", metavar="ID")
     ap.add_argument("--fix-permissions", action="store_true",
                     help="riskantās atļaujas no 'allow' pārvieto uz 'ask' (ar rezerves kopiju)")
-    ap.add_argument("--yes", action="store_true", help="--fix-permissions bez jautājumiem")
+    ap.add_argument("--yes", action="store_true", help="--fix-permissions/--fix-all bez jautājumiem")
+    ap.add_argument("--fix-all", action="store_true",
+                    help="viss vienā reizē: atļaujas + Desktop Commander (aizver un atkal atver Claude Desktop)")
     ap.add_argument("--version", action="version", version=VERSION)
     a = ap.parse_args()
 
@@ -1142,6 +1245,8 @@ def main():
         return install_schedule(a.time)
     if a.uninstall_schedule:
         return uninstall_schedule()
+    if a.fix_all:
+        return cmd_fix_all(cfg, a.repos, a.yes)
     if a.fix_permissions:
         return cmd_fix_permissions(cfg, a.repos, a.yes, a.path)
     if a.status:

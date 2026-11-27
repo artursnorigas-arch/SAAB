@@ -152,6 +152,22 @@ Desktop Commander ir MCP ar pilnu piekļuvi failiem un termināļa komandām. Ja
 
 Svarīgi: pēc paša izstrādātāja SECURITY.md `allowedDirectories` un `blockedCommands` **nav drošības robeža**. Reāla izolācija ir tikai Docker vai virtuālā mašīna. Praksē galvenā kontrole ir apstiprinājums pirms katras komandas (Claude Desktop → Settings → Extensions → rīkiem `start_process`, `write_file`, `edit_block` iestati "Needs approval") un komandas pārlasīšana pirms apstiprināšanas. Klienta ID audita izvadē netiek rādīts.
 
+## 5.7. Viss vienā reizē: `--fix-all`
+
+```bash
+cd ~/SAAB && git pull origin claude/elegant-feynman-il9yba && python3 claude_privatuma_audits.py --fix-all
+```
+
+Komanda pēc tava apstiprinājuma (`j`) izdara visu:
+
+1. aizver Claude Desktop (Desktop Commander konfigurāciju drīkst mainīt tikai tad, kad tas nedarbojas) un beigās to atkal atver;
+2. riskantās atļaujas pārvieto no `allow` uz `ask` (sk. 5.5);
+3. Desktop Commander: izslēdz telemetriju (`telemetryEnabled: false`) un ierobežo `allowedDirectories` uz `~/Developer` un `~/Documents/LSB` (tikai tās mapes, kas pastāv; esošie ieraksti un citi iestatījumi saglabājas);
+4. katram mainītajam failam izveido rezerves kopiju `.bak-GGGGMMDD-HHMMSS`;
+5. beigās parāda rezultātu: `✔ VISS SAKĀRTOTS` vai kas vēl palicis.
+
+Ja Claude Desktop neaizveras, skripts pārtrauc darbu un **nekas netiek mainīts**. Pēc `--fix-all` sarunas Claude Desktop saglabājas, aplikācija tikai uz brīdi aizveras un atkal atveras. Pirms palaišanas saglabā nepabeigto darbu citās Claude Desktop sarunās.
+
 # 6. Kontrole — kā pārliecināties, ka audits tiešām darbojas
 
 ## 6.1. `--status`
@@ -230,7 +246,7 @@ Pārbaude:         python3 claude_privatuma_audits.py [--min-severity HIGH] [--p
 Grafiks:          --install-schedule [--time HH:MM]    --uninstall-schedule
 Kontrole:         --status    --history
 Atradumi:         --accept ID|ALL    --unaccept ID    --show-accepted    --detail
-Atļaujas:         --fix-permissions [--yes] [--path X]
+Atļaujas:         --fix-permissions [--yes] [--path X]    --fix-all [--yes]
 Manuāli:          --checklist    --checklist-done
 Atgriezes kods:   0 tīrs/LOW · 1 MEDIUM · 2 HIGH/CRITICAL · 3 kontroles problēma (--status)
 Dati:             ~/.claude-audit/ (config.json, reports/, runs.jsonl, BRIDINAJUMS.txt)
