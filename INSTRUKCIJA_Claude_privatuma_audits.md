@@ -139,6 +139,19 @@ python3 claude_privatuma_audits.py --fix-permissions --path ~/projekts   # konkr
 - **Ieteikums:** kad Claude jautā par komandu, izvēlies **Yes (vienreiz)**, nevis "Yes, and don't ask again". Otrā izvēle ir tā, kas ieraksta plašās atļaujas `allow` sarakstā.
 - Ja kādu komandu tiešām vajag atļaut pastāvīgi, ieraksti to **šauri**: `Bash(python3 scripts/mans_skripts.py:*)`, nevis `Bash(python3 *)`.
 
+## 5.6. Desktop Commander pārbaude
+
+Desktop Commander ir MCP ar pilnu piekļuvi failiem un termināļa komandām. Ja tas ir uzstādīts (Claude paplašinājums, `claude_desktop_config.json` vai `~/.desktop-commander/`), audits automātiski pārbauda:
+
+| Kods | Smagums | Ko pārbauda | Ko darīt |
+|---|---|---|---|
+| `DC-01` | MEDIUM / LOW | Telemetrija ieslēgta (PRIVACY.md: pēc noklusējuma ieslēgta) vai konfigurācija nav atrasta | Sarunā: *"Please disable Desktop Commander telemetryEnabled in config"*, pēc tam pārstartē Claude Desktop. Ja fails nav atrasts: *"Show my Desktop Commander config (get_config)"* |
+| `DC-02` | MEDIUM | `allowedDirectories` tukšs (visa failu sistēma) vai ietver visu mājas mapi | Ieraksti tikai vajadzīgās mapes. Tas nav drošības robeža (termināli tas neierobežo), bet samazina nejaušu piekļuvi |
+| `DC-03` | MEDIUM / HIGH | Attālās ierīces sesija uzstādīta (`~/.desktop-commander-device/`) vai attālais režīms **darbojas** | `npx @wonderwhy-er/desktop-commander@latest remote --logout` |
+| `DC-04` | LOW | `blockedCommands` tukšs | Informatīvi |
+
+Svarīgi: pēc paša izstrādātāja SECURITY.md `allowedDirectories` un `blockedCommands` **nav drošības robeža**. Reāla izolācija ir tikai Docker vai virtuālā mašīna. Praksē galvenā kontrole ir apstiprinājums pirms katras komandas (Claude Desktop → Settings → Extensions → rīkiem `start_process`, `write_file`, `edit_block` iestati "Needs approval") un komandas pārlasīšana pirms apstiprināšanas. Klienta ID audita izvadē netiek rādīts.
+
 # 6. Kontrole — kā pārliecināties, ka audits tiešām darbojas
 
 ## 6.1. `--status`

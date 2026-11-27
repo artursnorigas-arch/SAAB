@@ -653,6 +653,83 @@ def check_json_structure(path, data, cfg, out):
             add("LOW", "CFG-07", "statusLine izpilda komandu", sl["command"])
 
 
+DC_CONFIGS = [".desktop-commander/config.json", ".claude-server-commander/config.json"]
+
+
+def dc_installed_paths():
+    """Atrod Desktop Commander paplašinājuma mapes vai konfigurācijas pieminējumus Claude Desktop konfigurācijā."""
+    claude, _, _ = platform_dirs()
+    found = []
+    for d in claude:
+        for sub in ("Claude Extensions", "Claude Extensions Settings"):
+            base = d / sub
+            if base.is_dir():
+                found += [x for x in base.iterdir() if "desktopcommander" in x.name.lower()
+                          or "desktop-commander" in x.name.lower()]
+        cfgf = d / "claude_desktop_config.json"
+        if cfgf.is_file():
+            try:
+                if re.search(r"desktop-?commander", cfgf.read_text(encoding="utf-8", errors="replace"), re.I):
+                    found.append(cfgf)
+            except OSError:
+                pass
+    return found
+
+
+def dc_remote_running():
+    if SYS == "Windows":
+        return False
+    try:
+        out = subprocess.run(["ps", "-axo", "command"], capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return False
+    return any(re.search(r"desktop-commander\S*.*\sremote\b", l) and "claude_privatuma" not in l
+               for l in out.splitlines())
+
+
+def check_desktop_commander(cfg):
+    """Desktop Commander (MCP ar pilnu failu un termināļa piekļuvi): telemetrija, mapes, attālā ierīce."""
+    out = []
+    if "DC-01" in cfg["ignore_rules"] and "DC-02" in cfg["ignore_rules"] and "DC-03" in cfg["ignore_rules"]:
+        return out
+    cfg_files = [HOME / c for c in DC_CONFIGS if (HOME / c).is_file()]
+    installed = dc_installed_paths()
+    device = HOME / ".desktop-commander-device" / "device.json"
+    if not (cfg_files or installed or device.exists()):
+        return out
+    where = str(installed[0] if installed else (cfg_files[0] if cfg_files else device))
+
+    def add(sev, rule, title, path, sn):
+        if rule not in cfg["ignore_rules"]:
+            out.append(Finding(sev, rule, "Desktop Commander: " + title, str(path), 0, snip(sn)))
+
+    if cfg_files:
+        c = load_json(cfg_files[0], {})
+        path = cfg_files[0]
+        if c.get("telemetryEnabled") is not False:
+            add("MEDIUM", "DC-01", "telemetrija ieslēgta (PRIVACY.md: pēc noklusējuma ieslēgta)", path,
+                f"telemetryEnabled={c.get('telemetryEnabled')!r}. Izslēgt: sarunā 'Please disable Desktop Commander telemetryEnabled in config'")
+        dirs = c.get("allowedDirectories")
+        if not dirs:
+            add("MEDIUM", "DC-02", "allowedDirectories tukšs = piekļuve visai failu sistēmai", path,
+                "ieraksti tikai vajadzīgās mapes (tas nav drošības robeža, bet samazina nejaušu piekļuvi)")
+        elif any(str(d).strip() in ("/", "~", str(HOME)) for d in dirs):
+            add("MEDIUM", "DC-02", "allowedDirectories ietver visu mājas mapi vai sakni", path, f"allowedDirectories={dirs}")
+        if not c.get("blockedCommands"):
+            add("LOW", "DC-04", "blockedCommands tukšs", path, "komandu melnais saraksts nav iestatīts")
+    else:
+        add("LOW", "DC-01", "konfigurācija nav atrasta, telemetriju nevar pārbaudīt (pēc noklusējuma tā ir ieslēgta)",
+            where, "pārbaudi sarunā: 'Show my Desktop Commander config (get_config)'")
+
+    if device.exists():
+        add("MEDIUM", "DC-03", "attālās ierīces sesija ir uzstādīta (rīka argumenti/rezultāti tiek īslaicīgi glabāti ārējā serverī)",
+            device, "ja neizmanto: npx @wonderwhy-er/desktop-commander@latest remote --logout")
+    if dc_remote_running():
+        add("HIGH", "DC-03", "attālais režīms PAŠLAIK DARBOJAS (komandas var pienākt no ārienes)", where,
+            "aptur ar Ctrl+C tajā logā vai pabeidz procesu")
+    return out
+
+
 def audit(targets, cfg):
     findings, hashes = [], {}
     files = walk(targets, cfg)
@@ -1089,14 +1166,13 @@ def main():
         if d:
             clones[d] = url
             targets.append(Path(d))
-    if not targets:
+    if not targets and a.no_default:
         print("Nav ko skenēt: nav atrasta neviena Claude mape. Izmanto --path vai --repos.")
         return 0
 
-    try:
-        findings, hashes, nfiles = audit(targets, cfg)
-    finally:
-        pass
+    findings, hashes, nfiles = audit(targets, cfg)
+    if not a.no_default:
+        findings += check_desktop_commander(cfg)
     for d, url in clones.items():
         for f in findings:
             f.path = f.path.replace(d, url)
