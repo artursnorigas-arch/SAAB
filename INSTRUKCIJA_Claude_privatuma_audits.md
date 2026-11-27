@@ -123,6 +123,22 @@ python3 claude_privatuma_audits.py --unaccept 4fa608fd248d4aca   # atcelt
 ```
 Apstiprinātie atradumi netiek skaitīti, nerada paziņojumus un neietekmē atgriezes kodu. **Ja faila saturs mainās, atradums parādās atkal**, jo ID ir saistīts ar saturu. Vienu rindu var arī atzīmēt ar komentāru `audit-ignore` pašā failā.
 
+## 5.5. Atļauju labošana: kods tiek palaists tikai ar tavu apstiprinājumu
+
+Claude Code atļaujām ir trīs saraksti: `allow` (palaiž bez jautāšanas), `ask` (vienmēr jautā) un `deny` (aizliegts). Rindas, piemēram, `Bash(python3 *)`, `mcp__…__place_order` vai `Read(~/.ssh/…)` sarakstā `allow` nozīmē, ka Claude (vai slēpta instrukcija kādā failā vai tīmekļa lapā) var tās izmantot bez tava ziņa.
+
+```bash
+python3 claude_privatuma_audits.py --fix-permissions            # jautā par katru failu (j/N)
+python3 claude_privatuma_audits.py --fix-permissions --yes      # visus uzreiz
+python3 claude_privatuma_audits.py --fix-permissions --path ~/projekts   # konkrēta mape
+```
+
+- Riskantās atļaujas tiek **pārvietotas uz `ask`**, nevis dzēstas. Claude turpmāk katru reizi jautās, un kods tiek palaists tikai tad, kad tu to apstiprini.
+- Pirms izmaiņām tiek izveidota rezerves kopija `settings.local.json.bak-GGGGMMDD-HHMMSS`. Atcelt var, atjaunojot to.
+- Drošās atļaujas (piem., `Bash(git status)`, `get_price_snapshot`) un `deny` saraksts netiek aiztikti.
+- **Ieteikums:** kad Claude jautā par komandu, izvēlies **Yes (vienreiz)**, nevis "Yes, and don't ask again". Otrā izvēle ir tā, kas ieraksta plašās atļaujas `allow` sarakstā.
+- Ja kādu komandu tiešām vajag atļaut pastāvīgi, ieraksti to **šauri**: `Bash(python3 scripts/mans_skripts.py:*)`, nevis `Bash(python3 *)`.
+
 # 6. Kontrole — kā pārliecināties, ka audits tiešām darbojas
 
 ## 6.1. `--status`
@@ -200,7 +216,8 @@ rm -rf ~/.claude-audit              # Windows: Remove-Item -Recurse $HOME\.claud
 Pārbaude:         python3 claude_privatuma_audits.py [--min-severity HIGH] [--path X] [--repos DIR] [--git URL]
 Grafiks:          --install-schedule [--time HH:MM]    --uninstall-schedule
 Kontrole:         --status    --history
-Atradumi:         --accept ID|ALL    --unaccept ID    --show-accepted
+Atradumi:         --accept ID|ALL    --unaccept ID    --show-accepted    --detail
+Atļaujas:         --fix-permissions [--yes] [--path X]
 Manuāli:          --checklist    --checklist-done
 Atgriezes kods:   0 tīrs/LOW · 1 MEDIUM · 2 HIGH/CRITICAL · 3 kontroles problēma (--status)
 Dati:             ~/.claude-audit/ (config.json, reports/, runs.jsonl, BRIDINAJUMS.txt)

@@ -22,6 +22,7 @@ Kontrole un uzraudzība:
     --status                            vai grafiks darbojas, vai skripts nav mainīts, cik sen pārbaudīts
     --history                           pēdējo palaišanu vēsture
     --accept ID|ALL / --unaccept ID     atzīt pārbaudītu atradumu par drošu
+    --fix-permissions [--yes]           riskantās atļaujas no 'allow' uz 'ask' (Claude vienmēr jautās)
     --checklist / --checklist-done      manuālā pārbaude tam, ko nevar redzēt lokāli (web, telefons, Connectors)
 
 Atgriezes kods: 0 = tīrs/LOW, 1 = ir MEDIUM, 2 = ir HIGH/CRITICAL, 3 = problēma ar kontroli (--status).
@@ -520,6 +521,14 @@ RE_MONEY_TOOL = re.compile(r"(place|submit|create|modify|cancel|replace)_?(order
                            r"send_?(email|mail|message)|post_?message|delete|remove|(create|update)_?draft", re.I)
 
 
+RE_SENS_READ = re.compile(r"^(Read|Bash)\(.*(\.ssh|\.aws|\.gnupg|\.kube|\.netrc|\.git-credentials|Keychains|Login Data|chat\.db)")
+
+
+def risky_perm(a):
+    a = a.strip()
+    return broad_perm(a) or bool(RE_SENS_READ.match(a)) or (a.startswith("mcp__") and bool(RE_MONEY_TOOL.search(a)))
+
+
 def broad_perm(a):
     a = a.strip()
     return bool(BROAD_PERM.match(a)) or (a.startswith("mcp__") and a.count("__") == 1)
@@ -617,7 +626,7 @@ def check_json_structure(path, data, cfg, out):
                 continue
             if broad_perm(a):
                 add("MEDIUM", "CFG-02", "pārāk plaša atļauja bez apstiprinājuma", a)
-            if re.match(r"^(Read|Bash)\(.*(\.ssh|\.aws|\.gnupg|\.kube|\.netrc|\.git-credentials|Keychains|Login Data|chat\.db)", a):
+            if RE_SENS_READ.match(a):
                 add("HIGH", "CFG-09", "atļauts bez apstiprinājuma lasīt noslēpumus/privātos datus", a)
             if a.startswith("mcp__") and RE_MONEY_TOOL.search(a):
                 add("HIGH", "CFG-08", "bez apstiprinājuma atļauta darbība ar naudu/sūtīšanu/dzēšanu (pārbaudi!)", a)
@@ -977,6 +986,51 @@ def cmd_accept(ids, findings, unaccept=False):
     return 0
 
 
+def cmd_fix_permissions(cfg, extra_repos, yes, paths=()):
+    """Pārvieto riskantās atļaujas no 'allow' uz 'ask': Claude turpmāk vienmēr jautās pirms palaišanas."""
+    targets, _ = default_targets(cfg, extra_repos)
+    targets = list(targets) + [Path(x).expanduser() for x in paths]
+    files = [f for f in walk(targets, cfg)
+             if f.name in ("settings.json", "settings.local.json") and ".claude" in f.parts
+             and not ({"plugins", "rpm", "skills", "marketplaces", "synced"} & set(f.parts))]
+    changed = 0
+    for f in sorted(set(files)):
+        data = load_json(f, None)
+        if not isinstance(data, dict):
+            continue
+        perm = data.get("permissions")
+        allow = perm.get("allow") if isinstance(perm, dict) else None
+        if not isinstance(allow, list):
+            continue
+        risky = [a for a in allow if isinstance(a, str) and risky_perm(a)]
+        if not risky:
+            continue
+        print(f"\n{str(f).replace(str(HOME), '~')}")
+        for a in risky:
+            print(f"    {a}")
+        if not yes:
+            try:
+                ans = input("  Pārvietot uz 'ask' (Claude vienmēr jautās)? [j/N] ").strip().lower()
+            except EOFError:
+                ans = ""
+            if ans not in ("j", "y", "jā", "ja", "yes"):
+                print("  izlaists")
+                continue
+        backup = f.with_name(f.name + ".bak-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
+        shutil.copy2(f, backup)
+        ask = perm.get("ask") if isinstance(perm.get("ask"), list) else []
+        perm["allow"] = [a for a in allow if a not in risky]
+        perm["ask"] = ask + [a for a in risky if a not in ask]
+        tmp = f.with_name(f.name + ".tmp")
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        os.replace(tmp, f)
+        changed += 1
+        print(f"  ✔ pārvietots uz 'ask'. Rezerves kopija: {backup.name}")
+    print(f"\nLaboti faili: {changed}. Atcelt: atjauno failu no .bak-… kopijas." if changed
+          else "\nNav ko labot: riskantu atļauju sarakstā 'allow' nav.")
+    return 0
+
+
 # ----------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser(description="Claude privātuma audits")
@@ -1000,6 +1054,9 @@ def main():
     ap.add_argument("--checklist-done", action="store_true")
     ap.add_argument("--accept", nargs="+", metavar="ID")
     ap.add_argument("--unaccept", nargs="+", metavar="ID")
+    ap.add_argument("--fix-permissions", action="store_true",
+                    help="riskantās atļaujas no 'allow' pārvieto uz 'ask' (ar rezerves kopiju)")
+    ap.add_argument("--yes", action="store_true", help="--fix-permissions bez jautājumiem")
     ap.add_argument("--version", action="version", version=VERSION)
     a = ap.parse_args()
 
@@ -1008,6 +1065,8 @@ def main():
         return install_schedule(a.time)
     if a.uninstall_schedule:
         return uninstall_schedule()
+    if a.fix_permissions:
+        return cmd_fix_permissions(cfg, a.repos, a.yes, a.path)
     if a.status:
         return cmd_status(cfg)
     if a.history:
