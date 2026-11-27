@@ -57,7 +57,7 @@ def host_of(u):
 
 HOME = Path.home()
 SYS = platform.system()          # Darwin | Windows | Linux
-VERSION = "2.0"
+VERSION = "2.1"
 WORK = HOME / ".claude-audit"
 CONFIG = WORK / "config.json"
 STATE = WORK / "state.json"
@@ -104,11 +104,11 @@ RULES = [
     ("EXFIL-02", "HIGH", "Zināms datu savākšanas/webhook pakalpojums",
      r"(discord(app)?\.com/api/webhooks|hooks\.slack\.com|webhook\.site|requestbin|pipedream\.net|ngrok(-free)?\.(io|app|dev)|transfer\.sh|pastebin\.com|paste\.ee|0x0\.st|file\.io|interact\.sh|oast\.(pro|live|site|online|fun|me)|trycloudflare\.com|api\.telegram\.org/bot|burpcollaborator)"),
     ("EXFIL-03", "HIGH", "Tiešs tīkla savienojums (nc/ncat/dev/tcp)",
-     r"(\b(nc|ncat|netcat)\s+(-\w+\s+)*[\w.-]+\s+\d{2,5}\b|/dev/(tcp|udp)/)"),
+     r"(\b(nc|ncat|netcat)\s+(?!-\w*z)(-\w+\s+)*(?!127\.0\.0\.1|localhost)[\w.-]+\s+\d{2,5}\b|/dev/(tcp|udp)/)"),
     ("EXFIL-04", "MEDIUM", "Failu pārsūtīšana uz attālu serveri (scp/rsync/sftp)",
      r"\b(scp|rsync|sftp)\b[^\n]*\s[\w.-]+@[\w.-]+:"),
-    ("EXFIL-05", "MEDIUM", "HTTP POST/PUT no koda",
-     r"(requests\.(post|put)\(|httpx\.(post|put)\(|urllib\.request\.urlopen\(|method\s*[:=]\s*['\"](POST|PUT)['\"]|XMLHttpRequest|navigator\.sendBeacon)"),
+    ("EXFIL-05", "LOW", "HTTP POST/PUT no koda",
+     r"(requests\.(post|put)\(|httpx\.(post|put)\(|method\s*[:=]\s*['\"](POST|PUT)['\"]|navigator\.sendBeacon)"),
     ("CRED-01", "HIGH", "Piekļuve atslēgām/akreditācijas datiem (.ssh, .aws, .kube, .netrc…)",
      r"(\.ssh/(id_|config|known_hosts|authorized_keys)|\.aws/(credentials|config)|\.gnupg\b|\.kube/config|\.netrc\b|\.docker/config\.json|\.npmrc\b|\.pypirc\b|\.git-credentials|\.config/gh/hosts)"),
     ("CRED-02", "CRITICAL", "Piekļuve macOS Keychain",
@@ -117,34 +117,34 @@ RULES = [
      r"(Chrome/[^\s\"']*(Login Data|Cookies|Web Data|History)|Firefox/Profiles|cookies\.sqlite|logins\.json|Safari/(Cookies|History|LastSession)|Library/Cookies|Brave-Browser|Microsoft Edge/Default)"),
     ("CRED-04", "HIGH", "Personiskie dati: Messages/Mail/Kontakti/Piezīmes/TCC",
      r"(Library/Messages|chat\.db\b|Library/Mail\b|AddressBook|NoteStore\.sqlite|com\.apple\.TCC|TCC\.db|Library/Calendars)"),
-    ("CRED-05", "MEDIUM", "Vides mainīgo (slepeno atslēgu) izvilkšana",
-     r"(\bprintenv\b|\benv\s*\||\benv\s*>|os\.environ(\.copy\(\)|\.items\(\))|JSON\.stringify\(process\.env\)|\bset\s*\|\s*(curl|nc))"),
-    ("CRED-06", "MEDIUM", ".env faila lasīšana",
+    ("CRED-05", "LOW", "Vides mainīgo (slepeno atslēgu) izvilkšana",
+     r"(\bprintenv\b|\benv\s*\|\s*(curl|nc|base64|openssl)|JSON\.stringify\(process\.env\)|os\.environ(\.copy\(\)|\.items\(\))[^\n]*(requests|urlopen|post|curl))"),
+    ("CRED-06", "LOW", ".env faila lasīšana",
      r"\b(cat|less|more|head|tail|source|open|read)\b[^\n]*\s[\w./~-]*\.env\b"),
     ("SECRET-01", "HIGH", "Failā cieti ierakstīta slepenā atslēga/token",
      r"(sk-ant-[\w-]{20,}|sk-[A-Za-z0-9]{32,}|ghp_[A-Za-z0-9]{30,}|github_pat_[\w]{30,}|xox[abprs]-[\w-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|-----BEGIN (RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----)"),
     ("INJ-01", "HIGH", "Instrukciju ignorēšana (prompt injection)",
      r"(ignore|disregard|forget|override)\s+(all\s+|any\s+|the\s+|your\s+)*(previous|prior|above|earlier|system|safety)\s+(instructions|rules|prompts?|guidelines|messages)"),
     ("INJ-02", "HIGH", "Prasība slēpt darbības no lietotāja",
-     r"((do not|don'?t|never|must not)\s+(tell|inform|mention|reveal|show|notify|disclose|alert)[^\n]{0,40}(user|human|person)|without\s+(telling|informing|notifying|alerting)\s+the\s+user|hide\s+this\s+from|keep\s+this\s+(secret|hidden|confidential)\s+from|nesaki\s+lietotājam|neinformē\s+lietotāj)"),
+     r"((do not|don'?t|never|must not)\s+(tell|inform|mention|reveal|show|notify|disclose|alert)\s+(this|it|that|these|those|any of (this|these))\b[^\n]{0,30}\b(user|human|person)|without\s+(telling|informing|notifying|alerting)\s+the\s+(user|human)|hide\s+(this|it)\s+from|keep\s+(this|it)\s+(secret|hidden|confidential)\s+from|nesaki\s+lietotājam|neinformē\s+lietotāj)"),
     ("INJ-03", "MEDIUM", "Slepenas/fona darbības formulējums",
-     r"\b(silently|secretly|covertly|stealthily|quietly\s+(send|upload|post|copy))\b"),
+     r"(\b(silently|secretly|covertly|stealthily)\s+(send|upload|post|forward|exfiltrate|transmit|copy|collect|install|run|execute|download)\b|\b(send|upload|post|forward|transmit|copy|collect)\b[^\n]{0,40}\b(silently|secretly|covertly)\b)"),
     ("INJ-04", "HIGH", "Prasība sūtīt sarunu/atmiņu/personas datus uz ārieni",
      r"(send|upload|post|forward|exfiltrate|transmit|leak)[^\n]{0,60}(conversation|chat history|memory|memories|user'?s? (data|files|email|name|contacts|documents)|system prompt|credentials|api[ _-]?keys?|passwords?)[^\n]{0,80}(to\s+https?://|to\s+(the\s+)?(server|endpoint|url|webhook|address)|via\s+(http|email))"),
     ("INJ-05", "HIGH", "Drošības/atļauju apiešanas karodziņi",
-     r"(--dangerously-skip-permissions|bypassPermissions|dangerouslyDisableSandbox|--no-verify-ssl|NODE_TLS_REJECT_UNAUTHORIZED\s*[=:]\s*['\"]?0|curl\s[^\n]*\s(-k|--insecure)\b)"),
+     r"(--dangerously-skip-permissions|dangerouslyDisableSandbox|--no-verify-ssl|NODE_TLS_REJECT_UNAUTHORIZED\s*[=:]\s*['\"]?0|curl\s[^\n]*\s(-k|--insecure)\b)"),
     ("INJ-06", "MEDIUM", "Aicinājums izslēgt apstiprinājumus/drošību",
-     r"(disable\s+(the\s+)?(sandbox|permission|safety|confirmation)|skip\s+(the\s+)?(permission|confirmation|approval)|without\s+(asking|confirmation|permission|approval)|never\s+ask\s+(the\s+user\s+)?(for\s+)?(confirmation|permission))"),
+     r"(auto-?(approve|accept)\b|always\s+(approve|allow)\s+(all|every)|skip\s+(the\s+)?(permission|confirmation|approval)\s+(prompt|check|step)s?|never\s+ask\s+(the\s+user\s+)?(for\s+)?(confirmation|permission)|disable\s+(the\s+)?(sandbox|permission\s+(prompt|check)s?|safety))"),
     ("OBF-01", "CRITICAL", "Attālā koda lejupielāde un izpilde / base64 izpilde",
-     r"((curl|wget)[^\n|]*\|\s*(sudo\s+)?(ba|z|da)?sh\b|base64\s+(-d|-D|--decode)[^\n]*\|\s*(sudo\s+)?(ba|z)?sh\b|eval\s*\(?\s*\"?\$\(\s*(curl|wget)|python3?\s+-c\s+[^\n]*(exec|b64decode|urlopen)|(bash|sh)\s+<\(\s*(curl|wget))"),
-    ("OBF-02", "MEDIUM", "Dinamiska koda izpilde / dekodēšana (eval, exec, atob…)",
-     r"(\beval\s*[\(\$\"']|\bexec\s*\(|base64\.b64decode|\batob\(|String\.fromCharCode|new Function\(|(\\x[0-9a-fA-F]{2}){8,})"),
+     r"((curl|wget)[^\n|]*\|\s*(sudo\s+)?(ba|z|da)?sh\b|base64\s+(-d|-D|--decode)[^\n]*\|\s*(sudo\s+)?(ba|z)?sh\b|eval\s*\(?\s*\"?\$\(\s*(curl|wget)|python3?\s+-c\s+[^\n]*\b(exec\s*\(|b64decode|urlopen)|(bash|sh)\s+<\(\s*(curl|wget))"),
+    ("OBF-02", "LOW", "Dinamiska koda izpilde / dekodēšana (eval, atob…)",
+     r"(\beval\s*[\(\$\"']|\bnew Function\(|base64\.b64decode|\batob\(|(\\x[0-9a-fA-F]{2}){8,})"),
     ("PERS-01", "HIGH", "Pastāvīga ievietošanās (launchd/cron/login items)",
-     r"(launchctl\s+(load|bootstrap|submit|enable)|Library/LaunchAgents|Library/LaunchDaemons|\bcrontab\s+(-|\S)|/etc/cron|osascript[^\n]*login item|sfltool|systemctl\s+enable)"),
+     r"(launchctl\s+(load|bootstrap|submit|enable)|Library/LaunchAgents|Library/LaunchDaemons|\bcrontab\s+(-e\b|-r\b|-\s|[\w./~-]+\.(cron|txt|tab)\b)|/etc/cron|osascript[^\n]*login item|sfltool|systemctl\s+enable)"),
     ("PERS-02", "HIGH", "Shell profila (.zshrc/.bashrc…) modificēšana",
-     r"((>>?|tee\s+-a)\s*~?/?[\w./-]*\.(zshrc|zshenv|zprofile|bashrc|bash_profile|profile)\b|sed\s+-i[^\n]*\.(zshrc|zshenv|zprofile|bashrc|bash_profile))"),
+     r"((?<=\S)\s*>{1,2}\s*[\"']?~?/?[\w./$-]*\.(zshrc|zshenv|zprofile|bashrc|bash_profile|profile)\b|\btee\s+-a\s+[^\n]*\.(zshrc|zshenv|zprofile|bashrc|bash_profile)|sed\s+-i[^\n]*\.(zshrc|zshenv|zprofile|bashrc|bash_profile))"),
     ("PERS-03", "MEDIUM", "Claude iestatījumu/instrukciju modificēšana no skripta",
-     r"((>>?|tee(\s+-a)?|sed\s+-i|mv|cp)\s+[^\n]*\.claude/(settings|CLAUDE|hooks|skills|agents)|(>>?|tee)\s*[^\n]*\.claude\.json)"),
+     r"((?<=\S)\s*>{1,2}\s*[\"']?[^\s\"']*\.claude/(settings|CLAUDE|hooks|skills|agents)|\b(tee(\s+-a)?|sed\s+-i|mv|cp)\s+[^\n]*\.claude/(settings|CLAUDE|hooks|skills|agents)|(?<=\S)\s*>{1,2}\s*[\"']?[^\s\"']*\.claude\.json)"),
     ("WIN-01", "CRITICAL", "PowerShell: attālā koda izpilde / kodēta komanda",
      r"((iwr|irm|Invoke-WebRequest|Invoke-RestMethod|DownloadString|DownloadFile)[^\n]*\|\s*(iex|Invoke-Expression)|powershell[^\n]*\s-(enc|encodedcommand|e)\s+[A-Za-z0-9+/=]{20,}|certutil[^\n]*-urlcache|bitsadmin[^\n]*/transfer)"),
     ("WIN-02", "HIGH", "Windows: pastāvīga ievietošanās (schtasks/Run atslēga/Startup)",
@@ -157,16 +157,16 @@ RULES = [
      r"(secret-tool\s+(lookup|search)|\.local/share/keyrings|gnome-keyring|kwallet|\.config/(google-chrome|chromium|BraveSoftware)/[^\s\"']*(Login Data|Cookies)|\.mozilla/firefox)"),
     ("SURV-01", "HIGH", "Ekrāna/tastatūras/mikrofona pārtveršana",
      r"(\bscreencapture\b|CGEventTap|\bpynput\b|keylog|AVCaptureDevice|avfoundation|x11grab|\bsox\b[^\n]*-d\b|CGWindowListCreateImage)"),
-    ("SURV-02", "MEDIUM", "Starpliktuves (clipboard) piekļuve",
-     r"(\bpbpaste\b|\bpbcopy\b|NSPasteboard|navigator\.clipboard)"),
+    ("SURV-02", "LOW", "Starpliktuves (clipboard) piekļuve",
+     r"(\bpbpaste\b|\bpbcopy\b|NSPasteboard)"),
     ("SURV-03", "MEDIUM", "AppleScript piekļuve Mail/Messages/Contacts/Notes/Calendar",
-     r"tell\s+application\s+\"(Mail|Messages|Contacts|Notes|Calendar|Reminders|Photos|Safari|Google Chrome)\""),
-    ("SURV-04", "LOW", "osascript / System Events izmantošana",
-     r"\b(osascript|System Events)\b"),
+     r"tell\s+application\s+\"(Mail|Messages|Contacts|Notes|Calendar|Reminders|Photos)\""),
+    ("SURV-05", "LOW", "AppleScript piekļuve pārlūkam (Safari/Chrome)",
+     r"tell\s+application\s+\"(Safari|Google Chrome)\""),
 ]
 COMPILED = [(i, s, t, re.compile(p, re.I)) for i, s, t, p in RULES]
 
-RE_ZEROWIDTH = re.compile("[​-‏‪-‮⁠-⁤⁦-⁩]")
+RE_ZEROWIDTH = re.compile("[\u200b\u200e\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069]")
 RE_B64 = re.compile(r"[A-Za-z0-9+/]{240,}={0,2}")
 RE_HTML_COMMENT = re.compile(r"<!--(.{40,}?)-->", re.S)
 RE_URL = re.compile(r"https?://[^\s\"'<>)\]\}`\\]+", re.I)
@@ -179,13 +179,16 @@ TEXT_EXT = {".md", ".markdown", ".txt", ".json", ".jsonc", ".yml", ".yaml",
             ".toml", ".sh", ".bash", ".zsh", ".command", ".py", ".js", ".mjs",
             ".cjs", ".ts", ".rb", ".pl", ".plist", ".ini", ".cfg", ".conf", ""}
 ARCHIVE_EXT = {".zip", ".skill", ".plugin", ".mcpb", ".dxt"}
-SKIP_DIRS = {"node_modules", ".git", "projects", "cache", "Cache", "Code Cache",
+SKIP_DIRS = {"node_modules", ".git", "projects", "Cache", "Code Cache",
              "GPUCache", "IndexedDB", "Local Storage", "Session Storage",
              "blob_storage", "logs", "Crashpad", "Service Worker", "sentry",
              "Partitions", "vm_bundles", "DawnCache", "shell-snapshots",
              "todos", "statsig", "ide", "telemetry", "__pycache__", ".venv",
              "venv", "site-packages", "Network", "Shared Dictionary",
-             "audit-reports", "file-history", "paste-cache", "session-env"}
+             "audit-reports", "file-history", "paste-cache", "session-env",
+             ".trash", ".project-cache", "outputs", "uploads"}
+RE_SESSION_JSON = re.compile(r"(^|/)local_[0-9a-f-]{20,}\.json$", re.I)
+RE_MINIFIED = re.compile(r"(\.min\.(js|css)|-runtime\.js)$", re.I)
 SKIP_FILE_EXT = {".jsonl", ".log", ".sqlite", ".db", ".png", ".jpg", ".jpeg",
                  ".gif", ".pdf", ".docx", ".xlsx", ".pptx", ".woff", ".woff2",
                  ".ttf", ".ico", ".svg", ".map", ".lock", ".pyc"}
@@ -338,7 +341,8 @@ def walk(targets, cfg):
         else:
             files = []
             for dp, dn, fn in os.walk(t, followlinks=False):
-                dn[:] = [d for d in dn if d not in SKIP_DIRS]
+                dn[:] = [d for d in dn if d not in SKIP_DIRS and not d.startswith("temp_git_")
+                         and not (d == "marketplaces" and Path(dp).name == "plugins")]
                 files += [Path(dp) / f for f in fn]
         for f in files:
             try:
@@ -351,7 +355,7 @@ def walk(targets, cfg):
             if any(x in rp.replace("\\", "/") for x in cfg["ignore_paths"]):
                 continue
             ext = f.suffix.lower()
-            if ext in SKIP_FILE_EXT:
+            if ext in SKIP_FILE_EXT or RE_SESSION_JSON.search(rp.replace("\\", "/")) or RE_MINIFIED.search(rp):
                 continue
             if ext not in TEXT_EXT and ext not in ARCHIVE_EXT:
                 continue
@@ -392,25 +396,71 @@ def read_units(f):
         return []
 
 
+# ------------------------------------------------------------------ konteksts
+RE_DOC = re.compile(r"\.(md|markdown|txt|rst)$", re.I)
+RE_TEST = re.compile(r"(^|/)(tests?|__tests__|spec|fixtures|examples?|samples?|testdata)(/|$)|\.(test|spec)\.[jt]sx?$|(^|/)test_[^/]*\.py$|_test\.(py|go|js|ts)$", re.I)
+RE_INSTR = re.compile(r"(^|/)(SKILL|CLAUDE|CLAUDE\.local|AGENTS)\.md$|/(commands|agents)/[^/]+\.md$", re.I)
+RE_NOISE_FILE = re.compile(r"(^|/)(LICENSE|NOTICE|COPYING)[^/]*$|package-lock\.json$|\.lock$", re.I)
+# vārdi, kas rāda, ka teksts AIZSARDZĪBAI/piemēram, nevis uzbrukums
+NEG_IGNORE = re.compile(r"\b(never|don'?t|do not|must not|should not|refuse|reject|untrusted|treat (it |them |this )?as (data|text)|not (a|an) (instruction|command)|attack|injection|malicious|suspicious|warn|example|e\.g\.|such as|for instance|quote|adversarial)\b", re.I)
+NEG_HIDE = re.compile(r"\b(attack|injection|malicious|suspicious|warn|detect|example|e\.g\.|such as|for instance|adversarial)\b", re.I)
+LADDER = {"CRITICAL": "MEDIUM", "HIGH": "LOW", "MEDIUM": None, "LOW": None}
+BAD_TLD = {"py", "js", "ts", "json", "md", "sh", "txt", "yml", "yaml", "html", "css", "toml",
+           "lock", "invalid", "internal", "local", "test", "localhost", "example", "mjs", "cjs",
+           "tsx", "jsx", "xml", "png", "svg", "cfg", "ini"}
+RE_HOST = re.compile(r"^[a-z0-9-]+(\.[a-z0-9-]+)+$")
+
+
+def adjust(sev, rule, path, ctx):
+    """Pielāgo smagumu pēc konteksta; None = neziņot."""
+    p = path.replace("\\", "/")
+    test = bool(RE_TEST.search(p))
+    doc = bool(RE_DOC.search(p))
+    if rule == "SECRET-01":
+        return "LOW" if test else sev
+    if test:
+        return "LOW" if rule in ("OBF-01", "CRED-02") else None
+    if rule == "INJ-01":
+        if doc and not RE_INSTR.search(p):
+            return LADDER[sev]
+        return LADDER[sev] if NEG_IGNORE.search(ctx) else sev
+    if rule.startswith("INJ-"):
+        if doc and not RE_INSTR.search(p):
+            return LADDER[sev]
+        return LADDER[sev] if NEG_HIDE.search(ctx) else sev
+    if doc:
+        if RE_INSTR.search(p):   # instrukciju fails (SKILL.md u.c.): Claude to izpilda, tāpēc smagums paliek
+            return LADDER[sev] if NEG_IGNORE.search(ctx) else sev
+        return LADDER[sev]
+    return sev
+
+
 # ------------------------------------------------------------------ skenēšana
 def scan_text(path, text, cfg, out):
     ign = set(cfg["ignore_rules"])
     is_md = path.lower().endswith((".md", ".markdown"))
 
-    def add(sev, rule, title, line, sn):
-        if rule not in ign:
-            out.append(Finding(sev, rule, title, path, line, snip(sn)))
+    def add(sev, rule, title, line, sn, ctx=None):
+        if rule in ign:
+            return
+        sev2 = adjust(sev, rule, path, ctx if ctx is not None else sn)
+        if sev2:
+            out.append(Finding(sev2, rule, title, path, line, snip(sn)))
 
+    prev = ""
     for no, line in enumerate(text.splitlines(), 1):
+        cur_prev, prev = prev, line
         if "audit-ignore" in line:
             continue
+        long_line = len(line) > 2000          # minificēts kods: tikai nopietnie noteikumi
         L = line[:5000]
         for rid, sev, title, rx in COMPILED:
-            if rid in ign:
+            if rid in ign or (long_line and SEV_ORDER[sev] < 3):
                 continue
             m = rx.search(L)
             if m:
-                add(sev, rid, title, no, L[max(0, m.start() - 40):m.end() + 60])
+                add(sev, rid, title, no, L[max(0, m.start() - 40):m.end() + 60],
+                    ctx=cur_prev[-300:] + " " + L)
 
     body = text[1:] if text.startswith("﻿") else text
     m = RE_ZEROWIDTH.search(body)
@@ -420,27 +470,33 @@ def scan_text(path, text, cfg, out):
         add("HIGH", "OBF-03", "Neredzamas Unicode rakstzīmes (iespējamas slēptas instrukcijas)",
             ln, f"{n} neredzamas rakstzīmes (U+{ord(m.group()):04X}…)")
     m = RE_B64.search(body)
-    if m:
+    if m and not RE_MINIFIED.search(path):
         ln = body.count("\n", 0, m.start()) + 1
         add("MEDIUM", "OBF-04", "Garš base64 bloks (iespējami slēpti dati/kods)",
             ln, m.group()[:60] + f"… ({len(m.group())} zīmes)")
     if is_md:
         for m in RE_HTML_COMMENT.finditer(body):
-            ln = body.count("\n", 0, m.start()) + 1
-            add("MEDIUM", "OBF-05", "HTML komentārs ar saturu (var saturēt slēptas instrukcijas)",
-                ln, m.group(1))
-            break
+            if re.search(r"\b(ignore|instruction|assistant|claude|you must|always|never|do not|system|send|https?://)", m.group(1), re.I):
+                ln = body.count("\n", 0, m.start()) + 1
+                add("MEDIUM", "OBF-05", "HTML komentārs ar komandām (var saturēt slēptas instrukcijas)",
+                    ln, m.group(1))
+                break
 
-    # domēni
-    urls = RE_URL.findall(text)
+    # ārējie domēni: tikai kodā/konfigurācijā, nevis dokumentācijā un licencēs
+    p = path.replace("\\", "/")
+    if RE_DOC.search(p) or RE_TEST.search(p) or RE_NOISE_FILE.search(p):
+        return
     bad = {}
-    for u in urls:
+    for u in RE_URL.findall(text):
         h = host_of(u)
-        if h and not domain_ok(h, cfg["allowed_domains"]) and "$" not in h and "{" not in h:
+        if not h or "$" in h or "{" in h or not RE_HOST.match(h):
+            continue
+        if h.rsplit(".", 1)[-1] in BAD_TLD or not h.rsplit(".", 1)[-1].isalpha():
+            continue
+        if not domain_ok(h, cfg["allowed_domains"]):
             bad.setdefault(h, u)
-    if bad:
-        sev = "MEDIUM" if RE_NET_CODE.search(text) else "LOW"
-        add(sev, "NET-01", "Nezināmi ārējie domēni (nav atļauto sarakstā)", 1,
+    if bad and RE_NET_CODE.search(text):
+        add("MEDIUM", "NET-01", "Kods sazinās ar domēniem, kas nav atļauto sarakstā", 1,
             ", ".join(sorted(bad)[:8]) + (" …" if len(bad) > 8 else ""))
         for term in cfg["personal_terms"]:
             if term and term.lower() in text.lower():
@@ -451,9 +507,15 @@ def scan_text(path, text, cfg, out):
 
 
 SECRETISH = re.compile(r"(key|token|secret|passw|auth|cookie|bearer)", re.I)
-BROAD_PERM = re.compile(r"^(Bash|Bash\(\*\)|Bash\(\*:\*\)|Bash\(curl[^)]*\)|Bash\(wget[^)]*\)|"
-                        r"Bash\(sh[^)]*\)|Bash\(bash[^)]*\)|WebFetch|WebFetch\(\*\)|"
-                        r"Write|Edit|Read\(//?\*\*?\)|mcp__\w+)$")
+BROAD_PERM = re.compile(r"^(Bash|Bash\(\*\)|Bash\(\*:\*\)|Bash\((curl|wget|sh|bash|zsh|python3?|node|ssh|scp|rm|sudo|osascript)[: ]\*\)|"
+                        r"WebFetch|WebFetch\(\*\)|Write|Edit|Read\(//?\*\*?\))$")
+RE_MONEY_TOOL = re.compile(r"(place|submit|create|modify|cancel|replace)_?(order|trade)|(order|trade)_?(place|submit)|transfer|withdraw|payment|"
+                           r"send_?(email|mail|message)|post_?message|delete|remove|(create|update)_?draft", re.I)
+
+
+def broad_perm(a):
+    a = a.strip()
+    return bool(BROAD_PERM.match(a)) or (a.startswith("mcp__") and a.count("__") == 1)
 
 
 def walk_cmds(o, acc):
@@ -476,7 +538,11 @@ def check_mcp(name, srv, path, cfg, out, where=""):
     cmd = srv.get("command")
     args = [str(a) for a in (srv.get("args") or [])]
 
+    bundled = bool(re.search(r"/(plugins|rpm|synced|skills|marketplaces)/", path.replace("\\", "/")))
+
     def add(sev, rule, title, sn):
+        if bundled and rule in ("MCP-01", "MCP-04", "MCP-06") and sev in ("MEDIUM", "HIGH"):
+            sev = "LOW"       # spraudņa komplektā iekļauts, nav tavā aktīvajā konfigurācijā
         out.append(Finding(sev, rule, f"{tag}: {title}", path, 0, snip(sn)))
 
     if url:
@@ -540,8 +606,12 @@ def check_json_structure(path, data, cfg, out):
         if perm.get("defaultMode") == "bypassPermissions":
             add("HIGH", "CFG-01", "defaultMode = bypassPermissions (visi apstiprinājumi izslēgti)", "bypassPermissions")
         for a in perm.get("allow") or []:
-            if isinstance(a, str) and BROAD_PERM.match(a.strip()):
+            if not isinstance(a, str):
+                continue
+            if broad_perm(a):
                 add("MEDIUM", "CFG-02", "pārāk plaša atļauja bez apstiprinājuma", a)
+            if a.startswith("mcp__") and RE_MONEY_TOOL.search(a):
+                add("HIGH", "CFG-08", "bez apstiprinājuma atļauta darbība ar naudu/sūtīšanu/dzēšanu (pārbaudi!)", a)
         if data.get("enableAllProjectMcpServers"):
             add("MEDIUM", "CFG-03", "automātiski ieslēdz visus projektu MCP serverus", "enableAllProjectMcpServers=true")
         env = data.get("env") or {}
@@ -590,11 +660,18 @@ def active(findings):
     return [f for f in findings if not f.accepted]
 
 
-def render_text(findings, stats, min_sev, color, show_accepted=False):
+def group_findings(items):
+    """Apvieno vienādus (smagums, noteikums, fails) atradumus vienā ierakstā."""
+    groups = {}
+    for f in items:
+        groups.setdefault((f.severity, f.rule, f.path), []).append(f)
+    return list(groups.values())
+
+
+def render_text(findings, stats, min_sev, color, show_accepted=False, detail=False):
     act = active(findings)
     pool = findings if show_accepted else act
     shown = [f for f in pool if SEV_ORDER[f.severity] >= SEV_ORDER[min_sev]]
-    shown.sort(key=lambda f: (-SEV_ORDER[f.severity], f.path, f.line))
     cnt = {k: sum(1 for f in act if f.severity == k) for k in SEV_ORDER}
     L = [f"Claude privātuma audits v{VERSION} · {stats['time']} · {socket.gethostname()} ({SYS})",
          f"Skenēti faili: {stats['files']} · repozitoriji: {stats.get('repos', 0)} · "
@@ -604,19 +681,36 @@ def render_text(findings, stats, min_sev, color, show_accepted=False):
         L.append(f"Mainīti/jauni faili kopš pēdējās pārbaudes: {stats['changed']}, dzēsti: {stats['removed']}")
     for w in stats.get("warnings", []):
         L.append(("\033[1;91m" if color else "") + "⚠ " + w + (RESET if color else ""))
+    if min_sev != "LOW" and cnt["LOW"]:
+        L.append(f"(LOW līmeņa atradumi paslēpti; rādīt: --min-severity LOW)")
+    # kopsavilkums pa noteikumiem
+    by_rule = {}
+    for f in shown:
+        by_rule.setdefault((f.severity, f.rule, f.title), set()).add(f.path)
+    if by_rule:
+        L.append("\nKOPSAVILKUMS (noteikums · atradumu faili):")
+        for (sev, rule, title), paths in sorted(by_rule.items(), key=lambda x: (-SEV_ORDER[x[0][0]], -len(x[1]))):
+            L.append(f"  {sev:8} {rule:9} ×{len(paths):<4} {title}")
     L.append("")
     cur = None
-    for f in shown:
+    glist = group_findings(shown)
+    glist.sort(key=lambda g: (-SEV_ORDER[g[0].severity], g[0].path, g[0].line))
+    for g in glist:
+        f = g[0]
         if f.severity != cur:
             cur = f.severity
             L.append((COLORS[cur] if color else "") + f"== {cur} ==" + (RESET if color else ""))
         loc = (f"{f.path}:{f.line}" if f.line else f.path).replace(str(HOME), "~")
-        flags = (" [JAUNS]" if f.new else "") + (" [apstiprināts]" if f.accepted else "")
-        L += [f"[{f.rule}] #{f.fp()}{flags} {f.title}", f"    {loc}", f"    » {f.snippet}"]
+        flags = (" [JAUNS]" if any(x.new for x in g) else "") + (" [apstiprināts]" if f.accepted else "")
+        more = f" (×{len(g)} rindas)" if len(g) > 1 and not detail else ""
+        L += [f"[{f.rule}] #{f.fp()}{flags} {f.title}{more}", f"    {loc}", f"    » {f.snippet}"]
+        if detail:
+            for x in g[1:]:
+                L.append(f"    + :{x.line} » {x.snippet}")
     if not shown:
         L.append("Atradumu nav šajā smaguma līmenī. ✔")
     else:
-        L.append("\nPēc pārbaudes atzīt par drošu: --accept ID (vai --accept ALL)")
+        L.append("\nPēc pārbaudes atzīt par drošu: --accept ID (atzīst visu grupu tajā failā) vai --accept ALL")
     return "\n".join(L)
 
 
@@ -855,7 +949,11 @@ def clone_repo(url):
 
 def cmd_accept(ids, findings, unaccept=False):
     acc = load_json(ACCEPTED, {})
-    chosen = findings if "ALL" in ids else [f for f in findings if f.fp() in ids]
+    if "ALL" in ids:
+        chosen = findings
+    else:
+        keys = {(f.rule, f.path) for f in findings if f.fp() in ids}
+        chosen = [f for f in findings if f.fp() in ids or (f.rule, f.path) in keys]
     if not chosen and not unaccept:
         print("Neviens atradums neatbilst norādītajiem ID."); return 1
     for f in chosen:
@@ -877,7 +975,8 @@ def main():
     ap.add_argument("--repos", action="append", default=[], help="papildu mape ar git repozitorijiem")
     ap.add_argument("--git", action="append", default=[], help="attāla repozitorija URL (shallow clone)")
     ap.add_argument("--no-default", action="store_true", help="neskenēt standarta vietas")
-    ap.add_argument("--min-severity", default="LOW", choices=list(SEV_ORDER))
+    ap.add_argument("--min-severity", default="MEDIUM", choices=list(SEV_ORDER))
+    ap.add_argument("--detail", action="store_true", help="rādīt katru rindu atsevišķi")
     ap.add_argument("--show-accepted", action="store_true")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--notify", action="store_true")
@@ -992,7 +1091,7 @@ def main():
             print(json.dumps({"stats": stats, "findings": [dict(asdict(f), id=f.fp()) for f in findings]},
                              ensure_ascii=False, indent=2))
         else:
-            print(render_text(findings, stats, a.min_severity, sys.stdout.isatty(), a.show_accepted))
+            print(render_text(findings, stats, a.min_severity, sys.stdout.isatty(), a.show_accepted, a.detail))
             if not a.no_save:
                 print(f"\nPilns pārskats: {REPORTS}")
     if a.notify and (new_serious or w):
