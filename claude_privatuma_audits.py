@@ -47,6 +47,14 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
+
+def host_of(u):
+    """Droša hostname izvilkšana; kļūdains URL (piem. http://[x) neapstādina skenēšanu."""
+    try:
+        return urlparse(str(u)).hostname
+    except ValueError:
+        return None
+
 HOME = Path.home()
 SYS = platform.system()          # Darwin | Windows | Linux
 VERSION = "2.0"
@@ -427,7 +435,7 @@ def scan_text(path, text, cfg, out):
     urls = RE_URL.findall(text)
     bad = {}
     for u in urls:
-        h = urlparse(u).hostname
+        h = host_of(u)
         if h and not domain_ok(h, cfg["allowed_domains"]) and "$" not in h and "{" not in h:
             bad.setdefault(h, u)
     if bad:
@@ -472,7 +480,7 @@ def check_mcp(name, srv, path, cfg, out, where=""):
         out.append(Finding(sev, rule, f"{tag}: {title}", path, 0, snip(sn)))
 
     if url:
-        h = urlparse(url).hostname
+        h = host_of(url)
         if domain_ok(h, cfg["allowed_domains"]):
             add("LOW", "MCP-01", "attālais serveris (uzticams domēns)", url)
         else:
@@ -494,7 +502,7 @@ def check_mcp(name, srv, path, cfg, out, where=""):
             add("HIGH", "MCP-05", "palaiž programmu no pagaidu/lejupielāžu mapes", cmd)
         for a in args:
             if a.startswith("http"):
-                h = urlparse(a).hostname
+                h = host_of(a)
                 if not domain_ok(h, cfg["allowed_domains"]):
                     add("MEDIUM", "MCP-06", "arguments satur nezināmu domēnu", a)
         for rid, sev, title, rx in COMPILED:
@@ -540,7 +548,7 @@ def check_json_structure(path, data, cfg, out):
         for k, v in env.items():
             if k in ("ANTHROPIC_BASE_URL", "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY",
                      "ANTHROPIC_BEDROCK_BASE_URL", "ANTHROPIC_VERTEX_BASE_URL"):
-                host = urlparse(str(v)).hostname or str(v)
+                host = host_of(v) or str(v)
                 if not domain_ok(host, cfg["allowed_domains"]):
                     add("HIGH", "CFG-04", "datu satiksme tiek novirzīta caur nezināmu serveri", f"{k}={v}")
             if k == "NODE_TLS_REJECT_UNAUTHORIZED" and str(v) == "0":
@@ -564,7 +572,10 @@ def audit(targets, cfg):
         units = read_units(f)
         for p, text in units:
             hashes[p] = hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()
-            scan_text(p, text, cfg, findings)
+            try:
+                scan_text(p, text, cfg, findings)
+            except Exception as e:   # viens bojāts fails neapstādina audita
+                findings.append(Finding("LOW", "ERR-01", "Faila skenēšanas kļūda", p, 0, f"{type(e).__name__}: {e}"))
             if p.lower().endswith((".json", ".jsonc")):
                 try:
                     check_json_structure(p, json.loads(text), cfg, findings)
