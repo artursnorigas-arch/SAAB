@@ -84,7 +84,7 @@ DEFAULT_CONFIG = {
         "python.org", "modelcontextprotocol.io", "microsoft.com",
         "office.com", "microsoftonline.com", "google.com", "googleapis.com",
         "apple.com", "w3.org", "openxmlformats.org", "example.com",
-        "localhost", "127.0.0.1", "likumi.lv", "mk.gov.lv", "vm.gov.lv",
+        "localhost", "127.0.0.1", "interactivebrokers.com", "ibkr.com", "likumi.lv", "mk.gov.lv", "vm.gov.lv",
         "nvd.gov.lv", "spkc.gov.lv", "lsb.lv", "saeima.lv", "wikipedia.org",
     ],
     "personal_terms": [],          # piem. e-pasts, tālrunis, personas kods
@@ -226,7 +226,9 @@ def load_config():
         CONFIG.write_text(json.dumps(DEFAULT_CONFIG, indent=2,
                                      ensure_ascii=False), encoding="utf-8")
     cfg = dict(DEFAULT_CONFIG)
-    cfg.update(load_json(CONFIG, {}))
+    user = load_json(CONFIG, {})
+    cfg.update(user)
+    cfg["allowed_domains"] = sorted(set(DEFAULT_CONFIG["allowed_domains"]) | set(user.get("allowed_domains", [])))
     return cfg
 
 
@@ -408,6 +410,8 @@ LADDER = {"CRITICAL": "MEDIUM", "HIGH": "LOW", "MEDIUM": None, "LOW": None}
 BAD_TLD = {"py", "js", "ts", "json", "md", "sh", "txt", "yml", "yaml", "html", "css", "toml",
            "lock", "invalid", "internal", "local", "test", "localhost", "example", "mjs", "cjs",
            "tsx", "jsx", "xml", "png", "svg", "cfg", "ini"}
+RE_LISTITEM = re.compile(r"^\s*([-*]\s+)?`?(Read|Edit|Write)\(//?\*\*?/[^)]*\)`?\s*,?\s*$|^\s*[\"'][^\"'\s]{2,60}[\"'],?\s*(#.*)?$")
+LIST_SAFE_RULES = {"CRED-01", "CRED-03", "CRED-04", "WIN-03"}
 RE_HOST = re.compile(r"^[a-z0-9-]+(\.[a-z0-9-]+)+$")
 
 
@@ -454,8 +458,11 @@ def scan_text(path, text, cfg, out):
             continue
         long_line = len(line) > 2000          # minificēts kods: tikai nopietnie noteikumi
         L = line[:5000]
+        list_item = bool(RE_LISTITEM.match(L))   # atļauju/aizliegumu vai failu nosaukumu saraksta elements
         for rid, sev, title, rx in COMPILED:
             if rid in ign or (long_line and SEV_ORDER[sev] < 3):
+                continue
+            if list_item and rid in LIST_SAFE_RULES:
                 continue
             m = rx.search(L)
             if m:
@@ -610,6 +617,8 @@ def check_json_structure(path, data, cfg, out):
                 continue
             if broad_perm(a):
                 add("MEDIUM", "CFG-02", "pārāk plaša atļauja bez apstiprinājuma", a)
+            if re.match(r"^(Read|Bash)\(.*(\.ssh|\.aws|\.gnupg|\.kube|\.netrc|\.git-credentials|Keychains|Login Data|chat\.db)", a):
+                add("HIGH", "CFG-09", "atļauts bez apstiprinājuma lasīt noslēpumus/privātos datus", a)
             if a.startswith("mcp__") and RE_MONEY_TOOL.search(a):
                 add("HIGH", "CFG-08", "bez apstiprinājuma atļauta darbība ar naudu/sūtīšanu/dzēšanu (pārbaudi!)", a)
         if data.get("enableAllProjectMcpServers"):
